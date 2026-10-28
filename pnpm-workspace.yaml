@@ -1,0 +1,10 @@
+packages:
+  - frontend
+  - backend
+patchedDependencies:
+  wouter@3.7.1: frontend/patches/wouter@3.7.1.patch
+overrides:
+  tailwindcss>nanoid: 3.3.7
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - esbuild

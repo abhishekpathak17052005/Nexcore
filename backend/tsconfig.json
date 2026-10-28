@@ -1,0 +1,28 @@
+{
+  "include": [
+    "src/**/*",
+    "shared/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "outDir": "./dist",
+    "paths": {
+      "@shared/*": [
+        "./shared/*"
+      ]
+    },
+    "types": [
+      "node"
+    ]
+  }
+}

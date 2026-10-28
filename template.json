@@ -1,0 +1,27 @@
+{
+  "id": "web-db-user",
+  "name": "Next.js App (MongoDB,user)",
+  "description": "Next.js + Express full-stack web application with MongoDB and platform user flows",
+  "capabilities": [
+    "server",
+    "db",
+    "user"
+  ],
+  "files": [
+    "package.json",
+    "server/mongo.ts",
+    "app/layout.tsx",
+    "app/[[...slug]]/page.tsx",
+    "server/db.ts",
+    "server/routers.ts",
+    "client/src/App.tsx",
+    "client/src/lib/trpc.ts",
+    "client/src/pages/Home.tsx",
+    "server/auth.logout.test.ts"
+  ],
+  "source": {
+    "repository": "manus-ai/manus-sandbox",
+    "commit": "96caae59caace79529e4b3c3a32234cddd3e8411",
+    "path": "sandbox/templates/web-dev-templates/templates/web-db-user"
+  }
+}
