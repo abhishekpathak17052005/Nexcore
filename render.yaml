@@ -23,7 +23,7 @@ services:
       - key: COOKIE_SAME_SITE
         value: "lax"
       - key: CORS_ALLOWED_ORIGINS
-        value: "https://nexcore-backend-z808.onrender.com,http://localhost:3000"
+        value: "https://nexcore-backend-z808.onrender.com,http://localhost:3000,http://localhost:5000"
 
   # 2. Frontend Client Service
   - type: web
@@ -38,8 +38,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: BACKEND_URL
-        fromService:
-          type: web
-          name: nexcore-backend
-          property: host
+        value: "https://nexcore-backend-z808.onrender.com"
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://nexcore-backend-z808.onrender.com"
 
