@@ -296,54 +296,55 @@ export default function ClientsProjects({
               title="Registered Clients"
               detail={`Showing ${filteredClients.length} of ${clients.length} clients in database`}
             />
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Client Code</th>
-                    <th>Client Name</th>
-                    <th>Default Currency</th>
-                    <th>Associated Projects</th>
-                    <th>Status</th>
-                    {canManageClients && <th style={{ textAlign: "right" }}>Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredClients.map((client) => {
-                    const clientProjects = projects.filter((p) => p.clientId === client.id);
-                    return (
-                      <tr key={client.id}>
-                        <td><code style={{ background: "#EDF2F7", padding: "2px 6px", borderRadius: 4 }}>{client.clientCode}</code></td>
-                        <td><strong>{client.name}</strong></td>
-                        <td><span className="badge badge-currency">{client.defaultCurrency}</span></td>
-                        <td>
-                          <span style={{ color: clientProjects.length > 0 ? "#2B6CB0" : "#A0AEC0" }}>
-                            {clientProjects.length} {clientProjects.length === 1 ? "project" : "projects"}
-                          </span>
-                        </td>
-                        <td>
-                          <StatusBadge tone={client.status === "Active" ? "success" : "neutral"}>
-                            {client.status}
-                          </StatusBadge>
-                        </td>
-                        {canManageClients && (
-                          <td style={{ textAlign: "right" }}>
-                            <button
-                              className="button button-quiet"
-                              onClick={() => openClientModal(client)}
-                              title="Edit Client"
-                            >
-                              <Edit2 size={14} /> Edit
-                            </button>
+            {filteredClients.length > 0 ? (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Client Code</th>
+                      <th>Client Name</th>
+                      <th>Default Currency</th>
+                      <th>Associated Projects</th>
+                      <th>Status</th>
+                      {canManageClients && <th style={{ textAlign: "right" }}>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredClients.map((client) => {
+                      const clientProjects = projects.filter((p) => p.clientId === client.id);
+                      return (
+                        <tr key={client.id}>
+                          <td><code style={{ background: "#EDF2F7", padding: "2px 6px", borderRadius: 4 }}>{client.clientCode}</code></td>
+                          <td><strong>{client.name}</strong></td>
+                          <td><span className="badge badge-currency">{client.defaultCurrency}</span></td>
+                          <td>
+                            <span style={{ color: clientProjects.length > 0 ? "#2B6CB0" : "#A0AEC0" }}>
+                              {clientProjects.length} {clientProjects.length === 1 ? "project" : "projects"}
+                            </span>
                           </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {filteredClients.length === 0 && (
+                          <td>
+                            <StatusBadge tone={client.status === "Active" ? "success" : "neutral"}>
+                              {client.status}
+                            </StatusBadge>
+                          </td>
+                          {canManageClients && (
+                            <td style={{ textAlign: "right" }}>
+                              <button
+                                className="button button-quiet"
+                                onClick={() => openClientModal(client)}
+                                title="Edit Client"
+                              >
+                                <Edit2 size={14} /> Edit
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
               <EmptyState
                 title="No clients found"
                 description={query ? "No clients match your search criteria." : "No clients have been created yet."}
@@ -360,60 +361,61 @@ export default function ClientsProjects({
               title="Project Workstreams"
               detail={`Showing ${filteredProjects.length} of ${projects.length} projects in database`}
             />
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Project Name</th>
-                    <th>Client</th>
-                    <th>Billing Currency</th>
-                    <th>Schedule</th>
-                    <th>Status</th>
-                    {canManageProjects && <th style={{ textAlign: "right" }}>Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProjects.map((project) => {
-                    const client = clients.find((c) => c.id === project.clientId);
-                    return (
-                      <tr key={project.id}>
-                        <td><strong>{project.name}</strong></td>
-                        <td>
-                          <span style={{ color: "#2B6CB0" }}>
-                            {client ? client.name : "Unassigned Client"}
-                          </span>
-                        </td>
-                        <td><span className="badge badge-currency">{project.billingCurrency}</span></td>
-                        <td className="muted-cell" style={{ fontSize: "13px" }}>
-                          {project.startDate ? (
-                            <span><Calendar size={12} style={{ display: "inline", marginRight: 4 }} />{project.startDate} {project.endDate ? `to ${project.endDate}` : "→ Ongoing"}</span>
-                          ) : (
-                            "Unscheduled"
-                          )}
-                        </td>
-                        <td>
-                          <StatusBadge tone={project.status === "Active" ? "success" : project.status === "On hold" ? "warning" : "neutral"}>
-                            {project.status}
-                          </StatusBadge>
-                        </td>
-                        {canManageProjects && (
-                          <td style={{ textAlign: "right" }}>
-                            <button
-                              className="button button-quiet"
-                              onClick={() => openProjectModal(project)}
-                              title="Edit Project"
-                            >
-                              <Edit2 size={14} /> Edit
-                            </button>
+            {filteredProjects.length > 0 ? (
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Project Name</th>
+                      <th>Client</th>
+                      <th>Billing Currency</th>
+                      <th>Schedule</th>
+                      <th>Status</th>
+                      {canManageProjects && <th style={{ textAlign: "right" }}>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProjects.map((project) => {
+                      const client = clients.find((c) => c.id === project.clientId);
+                      return (
+                        <tr key={project.id}>
+                          <td><strong>{project.name}</strong></td>
+                          <td>
+                            <span style={{ color: "#2B6CB0" }}>
+                              {client ? client.name : "Unassigned Client"}
+                            </span>
                           </td>
-                        )}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {filteredProjects.length === 0 && (
+                          <td><span className="badge badge-currency">{project.billingCurrency}</span></td>
+                          <td className="muted-cell" style={{ fontSize: "13px" }}>
+                            {project.startDate ? (
+                              <span><Calendar size={12} style={{ display: "inline", marginRight: 4 }} />{project.startDate} {project.endDate ? `to ${project.endDate}` : "→ Ongoing"}</span>
+                            ) : (
+                              "Unscheduled"
+                            )}
+                          </td>
+                          <td>
+                            <StatusBadge tone={project.status === "Active" ? "success" : project.status === "On hold" ? "warning" : "neutral"}>
+                              {project.status}
+                            </StatusBadge>
+                          </td>
+                          {canManageProjects && (
+                            <td style={{ textAlign: "right" }}>
+                              <button
+                                className="button button-quiet"
+                                onClick={() => openProjectModal(project)}
+                                title="Edit Project"
+                              >
+                                <Edit2 size={14} /> Edit
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
               <EmptyState
                 title="No projects found"
                 description={query ? "No projects match your search criteria." : "No projects have been added yet."}

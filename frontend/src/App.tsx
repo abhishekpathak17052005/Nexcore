@@ -340,7 +340,7 @@ function App() {
   const consultantQuery = trpc.consultants.list.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const clientQuery = trpc.clients.list.useQuery(undefined, { enabled: isAuthenticated && !isConsultant, retry: false });
   const projectQuery = trpc.projects.list.useQuery(undefined, { enabled: isAuthenticated && !isConsultant, retry: false });
-  const timeEntryQuery = trpc.timeEntries.list.useQuery({ page: 1, pageSize: 200 }, { enabled: isAuthenticated, retry: false });
+  const timeEntryQuery = trpc.timeEntries.list.useQuery({ page: 1, pageSize: 100 }, { enabled: isAuthenticated, retry: false });
 
   // Mutations
   const consultantCreate = trpc.consultants.create.useMutation();

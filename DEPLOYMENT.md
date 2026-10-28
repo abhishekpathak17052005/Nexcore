@@ -122,6 +122,30 @@ cd backend && npm start
 cd frontend && npm start
 ```
 
+### Render.com Deployment:
+
+**Important:** The frontend MUST be deployed as a **Web Service**, NOT a Static Site.
+
+1. **Using render.yaml (Recommended)**:
+   - Push your code to GitHub
+   - Connect your repository to Render
+   - Render will automatically detect `render.yaml` and create both services
+   - Ensure both services are created as "Web Services"
+
+2. **Manual Service Configuration**:
+   - Service Type: **Web Service** (NOT Static Site)
+   - Build Command: `npm install && npm run build`
+   - Start Command: `npm start`
+   - **Do NOT set** a "Publish Directory" (this field only exists for Static Sites)
+
+3. **Common Deployment Issues**:
+   - **Error: "Publish directory out does not exist"**
+     - This means the service is incorrectly configured as a Static Site
+     - Solution: Delete the service and recreate it as a Web Service
+   - **Build succeeds but service won't start**
+     - Check that `BACKEND_URL` environment variable is set correctly
+     - Verify the backend service is running and accessible
+
 ---
 
 ## 6. Known Limitations & Architectural Disclosures

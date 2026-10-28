@@ -55,15 +55,15 @@ export default function Retainers({
         </div>
 
         {/* Phase G Explicit Architectural Disclosure Callout */}
-        <div className="panel" style={{ padding: "20px", marginBottom: "24px", background: "#FEFCBF", borderLeft: "4px solid #D69E2E" }}>
-          <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
-            <AlertCircle size={22} style={{ color: "#B7791F", flexShrink: 0, marginTop: 2 }} />
-            <div>
-              <h3 style={{ fontSize: "15px", fontWeight: 700, color: "#744210", margin: "0 0 6px 0" }}>
+        <div className="panel" style={{ padding: "18px 20px", marginBottom: "24px", background: "linear-gradient(to right, #FEFCBF, #FEF9E7)", border: "1px solid #F6E05E", borderLeft: "4px solid #D69E2E" }}>
+          <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
+            <AlertCircle size={20} style={{ color: "#B7791F", flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#744210", margin: "0 0 8px 0" }}>
                 Retainer Contract Schema Dependency Notice (Phase G Compliance)
               </h3>
-              <p style={{ fontSize: "13px", color: "#744210", lineHeight: 1.6, margin: "0 0 10px 0" }}>
-                The current MongoDB data model stores <code>clients</code>, <code>projects</code>, <code>consultants</code>, and <code>timeEntries</code>.
+              <p style={{ fontSize: "12.5px", color: "#744210", lineHeight: 1.65, margin: 0 }}>
+                The current MongoDB data model stores <code style={{ background: "#FEF5E7", padding: "2px 5px", borderRadius: 3, fontSize: "11.5px" }}>clients</code>, <code style={{ background: "#FEF5E7", padding: "2px 5px", borderRadius: 3, fontSize: "11.5px" }}>projects</code>, <code style={{ background: "#FEF5E7", padding: "2px 5px", borderRadius: 3, fontSize: "11.5px" }}>consultants</code>, and <code style={{ background: "#FEF5E7", padding: "2px 5px", borderRadius: 3, fontSize: "11.5px" }}>timeEntries</code>.
                 Contractual retainer agreements (contracted baseline hours, fixed prepaid fees, rollover terms, and drawdown thresholds) are not currently defined as an independent database collection.
                 Per project specifications, retainer limits and remaining balances are <strong>not fabricated</strong>. Below is the live delivery engagement data alongside the proposed production schema.
               </p>
@@ -116,17 +116,18 @@ export default function Retainers({
 
         {/* Proposed Schema & Balance Calculation Specification */}
         <article className="panel" style={{ padding: "24px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px" }}>
             <FileCode size={20} color="#2B6CB0" />
-            <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>Proposed Retainer Production Specification</h2>
+            <h2 style={{ fontSize: "17px", fontWeight: 700, margin: 0, color: "#2D3748" }}>Proposed Retainer Production Specification</h2>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "28px" }}>
             <div>
-              <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#2D3748", marginBottom: "8px" }}>
-                1. Required Schema (`retainerAgreements` collection):
+              <h3 style={{ fontSize: "13px", fontWeight: 700, color: "#2D3748", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ background: "#2B6CB0", color: "white", width: "20px", height: "20px", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700 }}>1</span>
+                Required Schema (<code style={{ fontSize: "11px" }}>retainerAgreements</code> collection):
               </h3>
-              <pre style={{ background: "#1A202C", color: "#EDF2F7", padding: "16px", borderRadius: "6px", fontSize: "12px", overflowX: "auto" }}>
+              <pre style={{ background: "#1A202C", color: "#E2E8F0", padding: "14px 16px", borderRadius: "6px", fontSize: "11px", lineHeight: 1.7, overflowX: "auto", margin: 0, border: "1px solid #2D3748" }}>
 {`interface RetainerAgreement {
   _id: ObjectId;
   clientId: ObjectId;
@@ -147,20 +148,23 @@ export default function Retainers({
             </div>
 
             <div>
-              <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#2D3748", marginBottom: "8px" }}>
-                2. Balance & Drawdown Calculation Rules:
+              <h3 style={{ fontSize: "13px", fontWeight: 700, color: "#2D3748", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ background: "#2B6CB0", color: "white", width: "20px", height: "20px", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700 }}>2</span>
+                Balance & Drawdown Calculation Rules:
               </h3>
-              <div style={{ fontSize: "13px", color: "#4A5568", lineHeight: 1.6 }}>
-                <p><strong>Hour-based Retainers:</strong></p>
-                <code style={{ display: "block", background: "#EDF2F7", padding: "8px", borderRadius: 4, margin: "4px 0 12px 0" }}>
+              <div style={{ fontSize: "12.5px", color: "#4A5568", lineHeight: 1.7 }}>
+                <p style={{ margin: "0 0 6px 0", fontWeight: 600, color: "#2D3748" }}>Hour-based Retainers:</p>
+                <code style={{ display: "block", background: "#EDF2F7", padding: "10px 12px", borderRadius: 4, margin: "4px 0 16px 0", fontSize: "11px", border: "1px solid #E2E8F0", color: "#2D3748", lineHeight: 1.5 }}>
                   Remaining Hours = Contracted Hours - Approved Billable Hours in Period
                 </code>
-                <p><strong>Amount-based Retainers:</strong></p>
-                <code style={{ display: "block", background: "#EDF2F7", padding: "8px", borderRadius: 4, margin: "4px 0 12px 0" }}>
+                
+                <p style={{ margin: "0 0 6px 0", fontWeight: 600, color: "#2D3748" }}>Amount-based Retainers:</p>
+                <code style={{ display: "block", background: "#EDF2F7", padding: "10px 12px", borderRadius: 4, margin: "4px 0 16px 0", fontSize: "11px", border: "1px solid #E2E8F0", color: "#2D3748", lineHeight: 1.5 }}>
                   Remaining Balance = Contracted Amount - Invoiced Fees (or Estimated Approved Hours × Captured Rate)
                 </code>
-                <p>
-                  <strong>Invoices & Payments Impact:</strong> Prepayment invoices establish the starting credit balance; delivery logs draw down the balance; and reconciliation invoices bill any overage hours at the agreed upon surplus rate.
+                
+                <p style={{ margin: 0, fontSize: "11.5px", lineHeight: 1.6 }}>
+                  <strong style={{ color: "#2D3748" }}>Invoices & Payments Impact:</strong> Prepayment invoices establish the starting credit balance; delivery logs draw down the balance; and reconciliation invoices bill any overage hours at the agreed upon surplus rate.
                 </p>
               </div>
             </div>
