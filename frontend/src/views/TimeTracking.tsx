@@ -1,0 +1,96 @@
+import { useEffect, useMemo, useState } from "react";
+import { Check, ChevronDown, Download, Edit3, Filter, Plus, Search, SlidersHorizontal, X } from "lucide-react";
+import { AppShell } from "@/components/AppShell";
+import { BackendState } from "@/components/BackendState";
+import { EmptyState, PanelHeader, StatusBadge } from "@/components/DashboardPrimitives";
+import { TimeEntryForm } from "@/components/TimeEntryForm";
+import { formatCurrency, formatNumber } from "@/lib/calculations";
+import { filterTimeEntries, periodDateRange, sortTimeEntries, timeEntryFormValues, timeEntryMetrics, type TimeEntryValidationErrors } from "@/lib/timeEntryService";
+import type { BillingClassification, Client, Consultant, Project, ReportingPeriod, TimeEntry, TimeEntryDateRange, TimeEntryFormValues, TimeEntrySortKey, TimeEntryStatus } from "@/types";
+import type { BackendStatus } from "@/lib/backendService";
+import { useAuth } from "@/contexts/AuthContext";
+
+interface TimeTrackingProps {
+  period: ReportingPeriod;
+  onPeriodChange: (period: ReportingPeriod) => void;
+  records: TimeEntry[];
+  consultants: Consultant[];
+  clients: Client[];
+  projects: Project[];
+  backendStatus: BackendStatus;
+  onCreate: (values: TimeEntryFormValues) => Promise<void>;
+  onUpdate: (id: string, values: TimeEntryFormValues) => Promise<void>;
+  onTransition: (id: string, nextStatus: TimeEntryStatus, rejectionReason?: string) => Promise<string | null>;
+  onRetry: () => void;
+}
+
+const pageSize = 8;
+
+export default function TimeTracking({ period, onPeriodChange, records, consultants, clients, projects, backendStatus, onCreate, onUpdate, onTransition, onRetry }: TimeTrackingProps) {
+  const { can } = useAuth();
+  const [query, setQuery] = useState("");
+  const [consultantId, setConsultantId] = useState("");
+  const [clientId, setClientId] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [classification, setClassification] = useState<"" | BillingClassification>("");
+  const [status, setStatus] = useState<"" | TimeEntryStatus>("");
+  const [dateRange, setDateRange] = useState<TimeEntryDateRange>(() => periodDateRange(period));
+  const [sortKey, setSortKey] = useState<TimeEntrySortKey>("workDate");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const [formRecord, setFormRecord] = useState<TimeEntry | undefined>();
+  const [formOpen, setFormOpen] = useState(false);
+  const [rejecting, setRejecting] = useState<TimeEntry | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => { if (period !== "custom") setDateRange(periodDateRange(period)); }, [period]);
+  const filtered = useMemo(() => filterTimeEntries(records, query, { consultantId, clientId, projectId, billingClassification: classification, status, dateRange }, consultants, clients, projects), [records, query, consultantId, clientId, projectId, classification, status, dateRange, consultants, clients, projects]);
+  const sorted = useMemo(() => sortTimeEntries(filtered, sortKey, sortDirection, consultants, clients, projects), [filtered, sortKey, sortDirection, consultants, clients, projects]);
+  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const rows = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const metrics = timeEntryMetrics(filtered);
+  const visibleProjects = projects.filter((project) => !clientId || project.clientId === clientId);
+
+  const showToast = (message: string) => { setToast(message); window.setTimeout(() => setToast(null), 2600); };
+  const toggleSort = (key: TimeEntrySortKey) => { setPage(1); if (sortKey === key) setSortDirection((direction) => direction === "asc" ? "desc" : "asc"); else { setSortKey(key); setSortDirection(key === "workDate" || key === "consultant" ? "desc" : "asc"); } };
+  const clearFilters = () => { setQuery(""); setConsultantId(""); setClientId(""); setProjectId(""); setClassification(""); setStatus(""); setDateRange(periodDateRange(period)); setPage(1); };
+  const updateRange = (key: keyof TimeEntryDateRange, value: string) => { setDateRange((current) => ({ ...current, [key]: value })); setPage(1); if (period !== "custom") onPeriodChange("custom"); };
+  const exportCurrent = () => { const csv = toCsv(sorted, consultants, clients, projects); const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "time-entries-export.csv"; anchor.click(); URL.revokeObjectURL(url); showToast("CSV export started for the filtered entries."); };
+  const openAdd = () => { setFormRecord(undefined); setFormOpen(true); };
+  const openEdit = (entry: TimeEntry) => { setFormRecord(entry); setFormOpen(true); };
+  const saveNew = async (values: TimeEntryFormValues) => { try { await onCreate(values); setFormOpen(false); showToast("Time entry saved to persistent records as Draft."); } catch (error) { showToast(error instanceof Error ? error.message : "Time entry could not be saved."); } };
+  const saveEdit = async (values: TimeEntryFormValues) => { if (!formRecord) return; try { await onUpdate(formRecord.id, values); setFormOpen(false); showToast("Draft time entry updated in persistent records."); } catch (error) { showToast(error instanceof Error ? error.message : "Time entry could not be updated."); } };
+  const transition = async (entry: TimeEntry, nextStatus: TimeEntryStatus) => { const error = await onTransition(entry.id, nextStatus); if (error) showToast(error); else showToast(`Entry moved to ${nextStatus} in persistent records.`); };
+  const reject = async () => { if (!rejecting) return; const error = await onTransition(rejecting.id, "Rejected", rejectionReason); if (error) showToast(error); else { showToast("Entry rejected and recorded in approval history."); setRejecting(null); setRejectionReason(""); } };
+
+  if (backendStatus.enabled && !backendStatus.ready) return <AppShell period={period} onPeriodChange={onPeriodChange} alertCount={0}><div className="dashboard-page"><BackendState loading={backendStatus.loading} error={backendStatus.error} onRetry={onRetry} title="Time-entry records unavailable" /></div></AppShell>;
+
+  return <AppShell period={period} onPeriodChange={onPeriodChange} alertCount={metrics.pendingApproval}>
+    <div className="dashboard-page time-tracking-page">
+      <div className="dev-banner"><span className="dev-banner-dot" />Authenticated backend records<span className="dev-banner-separator">·</span><span>Approvals are persisted with audit history</span></div>
+      <div className="page-heading-row"><div><p className="eyebrow">Delivery operations <span className="eyebrow-dot" /></p><h1>Time tracking</h1><p className="page-subtitle">Capture work, preserve billing context, and move entries through review.</p></div><div className="heading-actions"><span className="last-updated"><span className="pulse-dot" />{metrics.pendingApproval} awaiting review</span>{can("time.write") && <button className="button button-primary" onClick={openAdd}><Plus size={16} />Add time entry</button>}</div></div>
+      <section className="directory-summary time-summary"><div className="directory-summary-item"><span className="summary-label">Filtered entries</span><strong>{formatNumber(filtered.length)}</strong><small>{records.length} records total</small></div><div className="directory-summary-item"><span className="summary-label">Billable hours</span><strong>{metrics.billableHours.toFixed(1)}</strong><small>Submitted or approved only</small></div><div className="directory-summary-item"><span className="summary-label">Non-billable hours</span><strong>{metrics.nonBillableHours.toFixed(1)}</strong><small>Tracked separately</small></div><div className="directory-summary-item"><span className="summary-label">Estimated revenue</span><strong>{formatCurrency(metrics.estimatedRevenueByCurrency.USD ?? 0, true)}</strong><small>{Object.keys(metrics.estimatedRevenueByCurrency).length > 1 ? "Grouped by currency" : "USD · rate snapshots"}</small></div></section>
+      <article className="panel directory-panel"><div className="directory-panel-header"><PanelHeader eyebrow="Time-entry register" title="Work entries" detail="Draft and rejected entries stay out of operational metrics until resubmitted." action={<button className="button button-quiet" onClick={exportCurrent}><Download size={14} />Export CSV</button>} /></div><div className="time-toolbar"><label className="table-search directory-search"><Search size={15} /><span className="sr-only">Search time entries</span><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search consultant, client, project, task" /></label><label className="date-range-control"><span>From</span><input type="date" value={dateRange.from} onChange={(event) => updateRange("from", event.target.value)} /></label><label className="date-range-control"><span>To</span><input type="date" value={dateRange.to} onChange={(event) => updateRange("to", event.target.value)} /></label><label className="select-control directory-select"><span className="sr-only">Filter by consultant</span><select value={consultantId} onChange={(event) => { setConsultantId(event.target.value); setPage(1); }}><option value="">All consultants</option>{consultants.map((consultant) => <option key={consultant.id} value={consultant.id}>{consultant.name}</option>)}</select><ChevronDown size={13} /></label><label className="select-control directory-select"><span className="sr-only">Filter by client</span><select value={clientId} onChange={(event) => { setClientId(event.target.value); setProjectId(""); setPage(1); }}><option value="">All clients</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select><ChevronDown size={13} /></label><label className="select-control directory-select"><span className="sr-only">Filter by project</span><select value={projectId} onChange={(event) => { setProjectId(event.target.value); setPage(1); }}><option value="">All projects</option>{visibleProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select><ChevronDown size={13} /></label><label className="select-control directory-select"><span className="sr-only">Filter by classification</span><select value={classification} onChange={(event) => { setClassification(event.target.value as "" | BillingClassification); setPage(1); }}><option value="">All types</option><option>Billable</option><option>Non-billable</option></select><ChevronDown size={13} /></label><label className="select-control directory-select"><span className="sr-only">Filter by approval status</span><select value={status} onChange={(event) => { setStatus(event.target.value as "" | TimeEntryStatus); setPage(1); }}><option value="">All statuses</option><option>Draft</option><option>Submitted</option><option>Approved</option><option>Rejected</option></select><ChevronDown size={13} /></label><button className="icon-button filter-icon-button" aria-label="Additional time entry filters"><SlidersHorizontal size={16} /></button>{(query || consultantId || clientId || projectId || classification || status) && <button className="clear-filters" onClick={clearFilters}><X size={13} />Clear</button>}</div><div className="table-scroll"><table className="time-entry-table"><thead><tr><th><SortButton label="Work date" sortKey="workDate" activeKey={sortKey} direction={sortDirection} onClick={toggleSort} /></th><th><SortButton label="Consultant" sortKey="consultant" activeKey={sortKey} direction={sortDirection} onClick={toggleSort} /></th><th>Client / project</th><th>Description</th><th><SortButton label="Hours" sortKey="hours" activeKey={sortKey} direction={sortDirection} onClick={toggleSort} /></th><th><SortButton label="Type" sortKey="billingClassification" activeKey={sortKey} direction={sortDirection} onClick={toggleSort} /></th><th>Rate / estimate</th><th><SortButton label="Status" sortKey="status" activeKey={sortKey} direction={sortDirection} onClick={toggleSort} /></th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{rows.map((entry) => <TimeEntryRow key={entry.id} entry={entry} consultants={consultants} clients={clients} projects={projects} onEdit={() => openEdit(entry)} onSubmit={() => transition(entry, "Submitted")} onApprove={() => transition(entry, "Approved")} onReject={() => setRejecting(entry)} onDraft={() => transition(entry, "Draft")} canWrite={can("time.write")} canSubmit={can("time.submit")} canApprove={can("time.approve")} />)}</tbody></table></div>{rows.length === 0 && <EmptyState title="No time entries match this view" description="Try widening the date range or clearing a filter. No historical entries are fabricated when data is unavailable." />}<div className="table-footer"><span>Showing {rows.length} of {sorted.length} filtered entries</span><div className="pagination-controls"><button className="pagination-button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>‹</button>{Array.from({ length: pageCount }, (_, index) => index + 1).slice(0, 5).map((pageNumber) => <button key={pageNumber} className={`pagination-button ${pageNumber === page ? "is-current" : ""}`} onClick={() => setPage(pageNumber)}>{pageNumber}</button>)}<button className="pagination-button" disabled={page >= pageCount} onClick={() => setPage((current) => current + 1)}>›</button></div></div></article>
+    </div>
+    {formOpen && <div className="drawer-scrim" onClick={() => setFormOpen(false)}><aside className="detail-drawer form-drawer" onClick={(event) => event.stopPropagation()}><TimeEntryForm record={formRecord} records={records} consultants={consultants} clients={clients} projects={projects} onSubmit={formRecord ? saveEdit : saveNew} onCancel={() => setFormOpen(false)} /></aside></div>}
+    {rejecting && <div className="drawer-scrim" onClick={() => setRejecting(null)}><aside className="detail-drawer rejection-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-header"><div><span className="panel-eyebrow">Approval action</span><h2>Reject time entry</h2><p>A reason is required so the consultant can correct and resubmit this entry.</p></div><button className="icon-button" onClick={() => setRejecting(null)} aria-label="Close rejection dialog"><X size={18} /></button></div><label className="form-field"><span className="form-label">Rejection reason <b>*</b></span><textarea value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} rows={5} placeholder="Explain what needs to be corrected." /></label><div className="drawer-form-actions"><button className="button button-quiet" onClick={() => setRejecting(null)}>Cancel</button><button className="button button-danger" disabled={!rejectionReason.trim()} onClick={reject}>Reject entry</button></div></aside></div>}
+    {toast && <div className="toast"><Check size={15} />{toast}</div>}
+  </AppShell>;
+}
+
+function TimeEntryRow({ entry, consultants, clients, projects, onEdit, onSubmit, onApprove, onReject, onDraft, canWrite, canSubmit, canApprove }: { entry: TimeEntry; consultants: Consultant[]; clients: Client[]; projects: Project[]; onEdit: () => void; onSubmit: () => void; onApprove: () => void; onReject: () => void; onDraft: () => void; canWrite: boolean; canSubmit: boolean; canApprove: boolean }) {
+  const consultant = consultants.find((record) => record.id === entry.consultantId);
+  const client = clients.find((record) => record.id === entry.clientId);
+  const project = projects.find((record) => record.id === entry.projectId);
+  const tone = entry.status === "Approved" ? "success" : entry.status === "Rejected" ? "danger" : entry.status === "Submitted" ? "warning" : "neutral";
+  return <tr><td className="date-cell">{entry.workDate}</td><td><strong className="compact-strong">{consultant?.name ?? "Unknown consultant"}</strong><span className="table-subline">{consultant?.employeeCode ?? entry.consultantId}</span></td><td><strong className="compact-strong">{client?.name ?? "Unknown client"}</strong><span className="table-subline">{project?.name ?? "Unknown project"}</span></td><td className="description-cell"><span>{entry.description}</span>{entry.rejectionReason && <small>Reason: {entry.rejectionReason}</small>}</td><td className="number-cell"><strong>{entry.hours.toFixed(2)}h</strong></td><td><span className={`classification-pill ${entry.billingClassification === "Billable" ? "billable" : "non-billable"}`}>{entry.billingClassification}</span></td><td className="rate-cell">{entry.billingRateSnapshot == null ? <span className="muted-cell">—</span> : <><strong>{formatCurrency(entry.billingRateSnapshot, false, entry.currency ?? "USD")}</strong><span>{formatCurrency(entry.hours * entry.billingRateSnapshot, true, entry.currency ?? "USD")} est.</span></>}</td><td><StatusBadge tone={tone}>{entry.status}</StatusBadge></td><td><div className="entry-actions">{canWrite && (entry.status === "Draft" || entry.status === "Rejected") && <button className="row-action" onClick={onEdit} title="Edit entry"><Edit3 size={14} /></button>}{canSubmit && entry.status === "Draft" && <button className="row-action text-action" onClick={onSubmit}>Submit</button>}{canApprove && entry.status === "Submitted" && <><button className="row-action text-action approve-action" onClick={onApprove}>Approve</button><button className="row-action text-action reject-action" onClick={onReject}>Reject</button></>}{canApprove && entry.status === "Rejected" && <button className="row-action text-action" onClick={onDraft}>To draft</button>}</div></td></tr>;
+}
+
+function SortButton({ label, sortKey, activeKey, direction, onClick }: { label: string; sortKey: TimeEntrySortKey; activeKey: TimeEntrySortKey; direction: "asc" | "desc"; onClick: (key: TimeEntrySortKey) => void }) { return <button onClick={() => onClick(sortKey)}>{label}<span className={`sort-indicator ${activeKey === sortKey ? "is-active" : ""}`}>{activeKey === sortKey ? direction === "asc" ? "↑" : "↓" : "↕"}</span></button>; }
+
+function toCsv(entries: TimeEntry[], consultants: Consultant[], clients: Client[], projects: Project[]) {
+  const header = ["Work date", "Consultant", "Client", "Project", "Description", "Hours", "Classification", "Status", "Billing rate", "Currency", "Estimated revenue"];
+  const rows = entries.map((entry) => { const consultant = consultants.find((record) => record.id === entry.consultantId); const client = clients.find((record) => record.id === entry.clientId); const project = projects.find((record) => record.id === entry.projectId); return [entry.workDate, consultant?.name ?? entry.consultantId, client?.name ?? entry.clientId, project?.name ?? entry.projectId, entry.description, entry.hours, entry.billingClassification, entry.status, entry.billingRateSnapshot ?? "", entry.currency ?? "", entry.billingRateSnapshot == null ? "" : entry.hours * entry.billingRateSnapshot]; });
+  return [header, ...rows].map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
+}
