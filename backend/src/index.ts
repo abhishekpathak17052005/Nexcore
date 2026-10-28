@@ -19,8 +19,8 @@ async function start() {
   if (!process.env.MONGODB_URI) {
     throw new Error("[Startup] Missing required environment variable: MONGODB_URI");
   }
-  if (isProduction && !process.env.MANUS_JWT_SECRET) {
-    throw new Error("[Startup] Production deployment requires MANUS_JWT_SECRET for secure session management.");
+  if (isProduction && !process.env.MANUS_JWT_SECRET && !process.env.SESSION_SECRET) {
+    throw new Error("[Startup] Production deployment requires SESSION_SECRET or MANUS_JWT_SECRET for secure session management.");
   }
   
   const app = express();
