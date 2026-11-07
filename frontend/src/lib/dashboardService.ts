@@ -71,20 +71,20 @@ export function consultantFormValues(record?: Consultant): ConsultantFormValues 
     role: record?.role ?? "",
     department: record?.department ?? "",
     employmentStatus: record?.employmentStatus ?? "Active",
-    weeklyCapacityHours: record ? String(record.weeklyCapacityHours) : "40",
-    billingRate: record ? String(record.billingRate) : "250",
+    weeklyCapacityHours: record ? String(record.weeklyCapacityHours) : "",
+    billingRate: record ? String(record.billingRate) : "",
     currency: record?.currency ?? "USD",
     startDate: record?.startDate ?? "",
-    assignedProjects: record?.assignedProjects.join(", ") ?? "",
+    assignedProjects: record?.assignedProjects?.join(", ") ?? "",
   };
 }
 
 export function deriveDashboardMetrics(records: Consultant[]): DashboardMetrics {
   const active = records.filter((record) => record.employmentStatus === "Active");
   const totalAvailable = active.reduce((sum, record) => sum + availableWorkingHours(record), 0);
-  const totalBillable = active.reduce((sum, record) => sum + record.billableHours, 0);
+  const totalBillable = active.reduce((sum, record) => sum + (record.billableHours ?? 0), 0);
   const averageUtilization = totalAvailable > 0 ? Math.round((totalBillable / totalAvailable) * 1000) / 10 : 0;
-  const estimatedRevenue = active.reduce((sum, record) => sum + (calculateEstimatedBillableRevenue(record.billableHours, record.billingRate) ?? 0), 0);
+  const estimatedRevenue = active.reduce((sum, record) => sum + (record.billingRate == null ? 0 : calculateEstimatedBillableRevenue(record.billableHours ?? 0, record.billingRate) ?? 0), 0);
   return {
     ...dashboardMetrics,
     activeConsultants: active.length,

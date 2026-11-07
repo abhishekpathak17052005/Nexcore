@@ -197,14 +197,19 @@ export function sortConsultants(records: Consultant[], key: ConsultantSortKey, d
   return [...records].sort((a, b) => {
     const first = a[key];
     const second = b[key];
-    const result = typeof first === "string" ? first.localeCompare(second as string) : (first as number) - (second as number);
+    const result = typeof first === "string" ? first.localeCompare(second as string) : Number(first) - Number(second);
     return direction === "asc" ? result : -result;
   });
 }
 
-export function consultantsToCsv(records: Consultant[]) {
-  const header = ["Employee Code", "Consultant", "Email", "Role", "Department", "Employment Status", "Weekly Capacity", "Billing Rate", "Currency", "Available Hours", "Billable Hours", "Utilization", "Revenue", "Performance Status"];
-  const rows = records.map((record) => [record.employeeCode, record.name, record.email, record.role, record.department, record.employmentStatus, record.weeklyCapacityHours, record.billingRate, record.currency, record.availableHours, record.billableHours, `${record.utilization}%`, record.revenue, record.status]);
+export function consultantsToCsv(records: Consultant[], includeFinancials = false) {
+  const header = ["Employee Code", "Consultant", "Email", "Role", "Department", "Employment Status", "Weekly Capacity"];
+  if (includeFinancials) header.push("Billing Rate", "Currency");
+  const rows = records.map((record) => {
+    const row: (string | number)[] = [record.employeeCode, record.name, record.email, record.role, record.department, record.employmentStatus, record.weeklyCapacityHours];
+    if (includeFinancials) row.push(record.billingRate ?? "", record.currency);
+    return row;
+  });
   return [header, ...rows].map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
 }
 

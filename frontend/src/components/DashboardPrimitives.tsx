@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, TableHTMLAttributes } from "react";
 import { ArrowDownRight, ArrowUpRight, CheckCircle2, CircleAlert, Info, MoreHorizontal, TrendingUp } from "lucide-react";
 
 export function KpiCard({ label, value, detail, delta, deltaLabel, icon, accent = "teal", children }: { label: string; value: string; detail: string; delta?: number; deltaLabel?: string; icon: ReactNode; accent?: "teal" | "navy" | "amber" | "blue"; children?: ReactNode }) {
@@ -12,6 +12,14 @@ export function StatusBadge({ tone, children }: { tone: "success" | "warning" | 
 
 export function PanelHeader({ eyebrow, title, detail, action }: { eyebrow?: string; title: string; detail?: string; action?: ReactNode }) {
   return <div className="panel-header"><div>{eyebrow && <span className="panel-eyebrow">{eyebrow}</span>}<h2>{title}</h2>{detail && <p>{detail}</p>}</div>{action}</div>;
+}
+
+export function PageHeader({ eyebrow, title, description, actions, meta }: { eyebrow: string; title: string; description: string; actions?: ReactNode; meta?: ReactNode }) {
+  return <div className="page-heading-row"><div><p className="eyebrow">{eyebrow} <span className="eyebrow-dot" /></p><h1>{title}</h1><p className="page-subtitle">{description}</p></div><div className="heading-actions">{meta}{actions}</div></div>;
+}
+
+export function DataTable({ children, className, ...props }: TableHTMLAttributes<HTMLTableElement>) {
+  return <div className="table-scroll"><table className={className} {...props}>{children}</table></div>;
 }
 
 export function TinyTrend({ values, color = "#0F9D91" }: { values: number[]; color?: string }) {

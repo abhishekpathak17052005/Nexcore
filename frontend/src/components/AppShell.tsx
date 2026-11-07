@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Bell, BriefcaseBusiness, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, FileBarChart2, Gauge, LayoutDashboard, Menu, PanelLeftClose, Search, Settings, Timer, UsersRound, WalletCards, X } from "lucide-react";
+import { Bell, BriefcaseBusiness, Building2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, FileBarChart2, Gauge, LayoutDashboard, Menu, Settings, Timer, UsersRound, WalletCards, X } from "lucide-react";
 import type { ReportingPeriod } from "@/types";
 import { periodLabel } from "@/lib/calculations";
 import { useAuth, type ClientPermission } from "@/contexts/AuthContext";
@@ -10,14 +10,16 @@ import { NotificationCenter } from "./NotificationCenter";
 const primaryNav = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
   { label: "Consultants", href: "/consultants", icon: UsersRound, permission: "consultants.read" as ClientPermission },
-  { label: "Time Tracking", href: "/time-tracking", icon: Timer, permission: "time.read" as ClientPermission },
+  { label: "Timesheets", href: "/time-tracking", icon: Timer, permission: "time.read" as ClientPermission },
+  { label: "Approvals", href: "/approvals", icon: CalendarClock, permission: "time.approve" as ClientPermission },
   { label: "Utilization", href: "/utilization", icon: Gauge, permission: "metrics.utilization" as ClientPermission },
   { label: "Revenue Analytics", href: "/revenue", icon: FileBarChart2, permission: "metrics.financial" as ClientPermission },
 ];
 
 const workspaceNav = [
-  { label: "Clients & Projects", href: "/clients-projects", icon: Building2, permission: "clients.read" as ClientPermission },
-  { label: "Retainers", href: "/retainers", icon: WalletCards },
+  { label: "Clients", href: "/clients", icon: Building2, permission: "clients.read" as ClientPermission },
+  { label: "Projects", href: "/projects", icon: Building2, permission: "projects.read" as ClientPermission },
+  { label: "Retainers", href: "/retainers", icon: WalletCards, permission: "clients.read" as ClientPermission },
   { label: "Alerts", href: "/alerts", icon: Bell },
   { label: "Reports", href: "/reports", icon: BriefcaseBusiness },
   { label: "Settings", href: "/settings", icon: Settings, permission: "users.manage" as ClientPermission },
@@ -32,15 +34,22 @@ interface AppShellProps {
   alertCount?: number;
 }
 
-export function AppShell({ children, period, onPeriodChange, alertCount = 4 }: AppShellProps) {
+export function AppShell({ children, period, onPeriodChange, alertCount = 0 }: AppShellProps) {
   const [location, setLocation] = useLocation();
   const { user, can, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [search, setSearch] = useState("");
   const [periodOpen, setPeriodOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileOpen]);
 
   const visiblePrimaryNav = primaryNav.filter((item) => !item.permission || can(item.permission));
   const visibleWorkspaceNav = workspaceNav.filter((item) => !item.permission || can(item.permission));
@@ -59,7 +68,7 @@ export function AppShell({ children, period, onPeriodChange, alertCount = 4 }: A
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${collapsed ? "is-collapsed" : ""} ${mobileOpen ? "is-mobile-open" : ""}`}>
+      <aside id="primary-navigation" className={`sidebar ${collapsed ? "is-collapsed" : ""} ${mobileOpen ? "is-mobile-open" : ""}`}>
         <div className="sidebar-top">
           <Link href="/" className="wordmark" onClick={closeMobile} aria-label="NEXCORE overview">
             <span className="wordmark-mark" aria-hidden="true"><i /><i /><i /></span>
@@ -80,7 +89,6 @@ export function AppShell({ children, period, onPeriodChange, alertCount = 4 }: A
           {visibleWorkspaceNav.map((item) => <NavItem key={item.href} item={item} active={location === item.href} collapsed={collapsed} onClick={closeMobile} />)}
         </nav>
         <div className="sidebar-bottom">
-          {!collapsed && <div className="help-card"><CircleHelp size={16} /><div><strong>Need a hand?</strong><span>View workspace guide</span></div></div>}
           <div className="profile-mini"><div className="avatar avatar-teal">{(user?.name ?? "User").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div>{!collapsed && <div className="profile-mini-copy"><strong>{user?.name ?? "Signed-out workspace"}</strong><span>{user?.role ?? "No assigned role"}</span></div>} {!collapsed && <ChevronRight size={15} className="profile-chevron" />}</div>
         </div>
       </aside>
@@ -88,7 +96,7 @@ export function AppShell({ children, period, onPeriodChange, alertCount = 4 }: A
       <main className={`main-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
         <header className="topbar">
           <div className="topbar-leading">
-            <button className="icon-button mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={20} /></button>
+            <button className="icon-button mobile-menu-button" onClick={() => setMobileOpen(true)} aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded={mobileOpen}><Menu size={20} /></button>
             <div className="breadcrumbs">
               <span>{orgQuery.data?.name ?? "Workspace"}</span>
               <span className="breadcrumb-slash">/</span>
@@ -96,21 +104,20 @@ export function AppShell({ children, period, onPeriodChange, alertCount = 4 }: A
             </div>
           </div>
           <div className="topbar-actions">
-            <label className="global-search"><Search size={17} /><span className="sr-only">Search workspace</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search workspace" /><kbd>⌘ K</kbd></label>
             <div className="topbar-divider" />
             <div className="period-control"><CalendarClock size={16} /><button className="period-trigger" onClick={() => setPeriodOpen((open) => !open)} aria-expanded={periodOpen}>{periodLabel(period)}<ChevronDown size={14} /></button>{periodOpen && <div className="floating-menu period-menu">{periods.map((option) => <button key={option} className={option === period ? "is-selected" : ""} onClick={() => { onPeriodChange(option); setPeriodOpen(false); }}>{periodLabel(option)}</button>)}</div>}</div>
             <NotificationCenter />
-            <div className="profile-control"><button className="profile-trigger" onClick={() => setProfileOpen((open) => !open)}><div className="avatar avatar-teal">{(user?.name ?? "User").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div><span className="profile-trigger-name">{user?.name ?? "Signed out"}</span><ChevronDown size={14} /></button>{profileOpen && <div className="floating-menu profile-menu"><strong>{user?.name ?? "Signed-out workspace"}</strong><span>{user?.role ?? "No assigned role"}</span><button onClick={() => setProfileOpen(false)}>Profile settings</button><button onClick={handleSignOut}>Sign out</button></div>}</div>
+            <div className="profile-control"><button className="profile-trigger" onClick={() => setProfileOpen((open) => !open)} aria-expanded={profileOpen}><div className="avatar avatar-teal">{(user?.name ?? "User").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div><span className="profile-trigger-name">{user?.name ?? "Signed out"}</span>{user?.role && <span className="role-indicator">{user.role}</span>}<ChevronDown size={14} /></button>{profileOpen && <div className="floating-menu profile-menu"><strong>{user?.name ?? "Signed-out workspace"}</strong><span>{user?.role ?? "No assigned role"}</span><button onClick={handleSignOut}>Sign out</button></div>}</div>
           </div>
         </header>
-        <button className="collapse-button" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>{collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}</button>
+        <button className="collapse-button" onClick={() => setCollapsed((value) => !value)} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed}>{collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}</button>
         <div className="content-area">{children}</div>
       </main>
     </div>
   );
 }
 
-function NavItem({ item, active, collapsed, onClick }: { item: (typeof primaryNav)[number]; active: boolean; collapsed: boolean; onClick: () => void }) {
+function NavItem({ item, active, collapsed, onClick }: { item: (typeof primaryNav)[number] | (typeof workspaceNav)[number]; active: boolean; collapsed: boolean; onClick: () => void }) {
   const Icon = item.icon;
-  return <Link href={item.href} className={`nav-item ${active ? "is-active" : ""}`} onClick={onClick} title={collapsed ? item.label : undefined}><Icon size={18} strokeWidth={active ? 2.3 : 1.8} /><span>{!collapsed && item.label}</span>{active && !collapsed && <span className="active-line" />}</Link>;
+  return <Link href={item.href} className={`nav-item ${active ? "is-active" : ""}`} onClick={onClick} title={collapsed ? item.label : undefined} aria-current={active ? "page" : undefined}><Icon size={18} strokeWidth={active ? 2.3 : 1.8} /><span>{!collapsed && item.label}</span>{active && !collapsed && <span className="active-line" />}</Link>;
 }
