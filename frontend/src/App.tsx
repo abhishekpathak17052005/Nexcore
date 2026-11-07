@@ -32,6 +32,8 @@ import type {
   Client,
   Project,
   CurrencyCode,
+  Retainer,
+  RetainerFormValues,
 } from "@/types";
 
 interface RouterProps {
@@ -41,16 +43,22 @@ interface RouterProps {
   timeEntries: TimeEntry[];
   clients: Client[];
   projects: Project[];
+  retainers: Retainer[];
   backendStatus: BackendStatus;
   onCreateConsultant: (values: ConsultantFormValues) => Promise<void>;
   onUpdateConsultant: (id: string, values: ConsultantFormValues) => Promise<void>;
+  onDeactivateConsultant: (id: string) => Promise<void>;
   onCreateClient: (data: { clientCode: string; name: string; status: "Active" | "Inactive"; defaultCurrency: CurrencyCode }) => Promise<void>;
   onUpdateClient: (id: string, data: { clientCode: string; name: string; status: "Active" | "Inactive"; defaultCurrency: CurrencyCode }) => Promise<void>;
   onCreateProject: (data: { clientId: string; name: string; status: "Active" | "On hold" | "Closed"; billingCurrency: CurrencyCode; startDate?: string | null; endDate?: string | null }) => Promise<void>;
   onUpdateProject: (id: string, data: { clientId: string; name: string; status: "Active" | "On hold" | "Closed"; billingCurrency: CurrencyCode; startDate?: string | null; endDate?: string | null }) => Promise<void>;
-  onTimeEntryCreate: (values: TimeEntryFormValues) => Promise<void>;
-  onTimeEntryUpdate: (id: string, values: TimeEntryFormValues) => Promise<void>;
+  onTimeEntryCreate: (values: TimeEntryFormValues) => Promise<TimeEntry>;
+  onTimeEntryUpdate: (id: string, values: TimeEntryFormValues) => Promise<TimeEntry>;
   onTimeEntryTransition: (id: string, nextStatus: TimeEntryStatus, rejectionReason?: string) => Promise<string | null>;
+  onCreateRetainer: (values: RetainerFormValues) => Promise<void>;
+  onUpdateRetainer: (id: string, values: RetainerFormValues) => Promise<void>;
+  onActivateRetainer: (id: string) => Promise<void>;
+  onTerminateRetainer: (id: string) => Promise<void>;
   onRetry: () => void;
 }
 
@@ -128,9 +136,11 @@ function Router({
   timeEntries,
   clients,
   projects,
+  retainers,
   backendStatus,
   onCreateConsultant,
   onUpdateConsultant,
+  onDeactivateConsultant,
   onCreateClient,
   onUpdateClient,
   onCreateProject,
@@ -138,9 +148,38 @@ function Router({
   onTimeEntryCreate,
   onTimeEntryUpdate,
   onTimeEntryTransition,
+  onCreateRetainer,
+  onUpdateRetainer,
+  onActivateRetainer,
+  onTerminateRetainer,
   onRetry,
 }: RouterProps) {
   const { user, loading } = useAuth();
+  const timeTrackingProps = {
+    period,
+    onPeriodChange,
+    records: timeEntries,
+    consultants,
+    clients,
+    projects,
+    backendStatus,
+    onCreate: onTimeEntryCreate,
+    onUpdate: onTimeEntryUpdate,
+    onTransition: onTimeEntryTransition,
+    onRetry,
+  };
+  const clientsProjectsProps = {
+    period,
+    onPeriodChange,
+    clients,
+    projects,
+    backendStatus,
+    onCreateClient,
+    onUpdateClient,
+    onCreateProject,
+    onUpdateProject,
+    onRetry,
+  };
 
   return (
     <Switch>
@@ -182,9 +221,8 @@ function Router({
               period={period}
               onPeriodChange={onPeriodChange}
               consultants={consultants}
-              clients={clients}
-              projects={projects}
-              timeEntries={timeEntries}
+              backendStatus={backendStatus}
+              onRetry={onRetry}
             />
           );
         }}
@@ -196,12 +234,12 @@ function Router({
               period={period}
               onPeriodChange={onPeriodChange}
               records={consultants}
-              timeEntries={timeEntries}
               clients={clients}
               projects={projects}
               backendStatus={backendStatus}
               onCreate={onCreateConsultant}
               onUpdate={onUpdateConsultant}
+              onDeactivate={onDeactivateConsultant}
               onRetry={onRetry}
             />
           </ProtectedView>
@@ -210,19 +248,14 @@ function Router({
       <Route path="/time-tracking">
         {() => (
           <ProtectedView permission="time.read">
-            <TimeTracking
-              period={period}
-              onPeriodChange={onPeriodChange}
-              records={timeEntries}
-              consultants={consultants}
-              clients={clients}
-              projects={projects}
-              backendStatus={backendStatus}
-              onCreate={onTimeEntryCreate}
-              onUpdate={onTimeEntryUpdate}
-              onTransition={onTimeEntryTransition}
-              onRetry={onRetry}
-            />
+            <TimeTracking {...timeTrackingProps} />
+          </ProtectedView>
+        )}
+      </Route>
+      <Route path="/approvals">
+        {() => (
+          <ProtectedView permission="time.approve">
+            <TimeTracking key="approvals" {...timeTrackingProps} view="approvals" />
           </ProtectedView>
         )}
       </Route>
@@ -255,58 +288,56 @@ function Router({
       <Route path="/clients-projects">
         {() => (
           <ProtectedView permission="clients.read">
-            <ClientsProjects
-              period={period}
-              onPeriodChange={onPeriodChange}
-              clients={clients}
-              projects={projects}
-              backendStatus={backendStatus}
-              onCreateClient={onCreateClient}
-              onUpdateClient={onUpdateClient}
-              onCreateProject={onCreateProject}
-              onUpdateProject={onUpdateProject}
-              onRetry={onRetry}
-            />
+            <ClientsProjects {...clientsProjectsProps} />
           </ProtectedView>
         )}
       </Route>
+      <Route path="/clients">
+        {() => <ProtectedView permission="clients.read"><ClientsProjects {...clientsProjectsProps} initialTab="clients" /></ProtectedView>}
+      </Route>
+      <Route path="/projects">
+        {() => <ProtectedView permission="projects.read"><ClientsProjects {...clientsProjectsProps} initialTab="projects" /></ProtectedView>}
+      </Route>
       <Route path="/alerts">
         {() => (
-          <ProtectedView>
+          <ProtectedView permission="clients.read">
             <Alerts
               period={period}
               onPeriodChange={onPeriodChange}
-              consultants={consultants}
-              clients={clients}
-              projects={projects}
-              timeEntries={timeEntries}
             />
           </ProtectedView>
         )}
       </Route>
       <Route path="/retainers">
         {() => (
-          <ProtectedView>
+          <ProtectedView permission="clients.read">
             <Retainers
               period={period}
               onPeriodChange={onPeriodChange}
+              retainers={retainers}
               clients={clients}
               projects={projects}
-              timeEntries={timeEntries}
+              backendStatus={backendStatus}
+              onCreate={onCreateRetainer}
+              onUpdate={onUpdateRetainer}
+              onActivate={onActivateRetainer}
+              onTerminate={onTerminateRetainer}
+              onRetry={onRetry}
             />
           </ProtectedView>
         )}
       </Route>
       <Route path="/reports">
         {() => (
-          <ProtectedView>
+          <ProtectedView permission="time.read">
             <Reports
               period={period}
               onPeriodChange={onPeriodChange}
               consultants={consultants}
               clients={clients}
               projects={projects}
-              timeEntries={timeEntries}
+              backendStatus={backendStatus}
+              onRetry={onRetry}
             />
           </ProtectedView>
         )}
@@ -334,6 +365,7 @@ function App() {
   const logoutMutation = trpc.auth.logout.useMutation();
 
   const isConsultant = authQuery.data?.role === "consultant";
+  const canViewFinancials = authQuery.data?.role === "admin" || authQuery.data?.role === "finance";
   const isAuthenticated = Boolean(authQuery.data);
 
   // Real backend queries across all screens - only fire when authenticated
@@ -341,10 +373,22 @@ function App() {
   const clientQuery = trpc.clients.list.useQuery(undefined, { enabled: isAuthenticated && !isConsultant, retry: false });
   const projectQuery = trpc.projects.list.useQuery(undefined, { enabled: isAuthenticated && !isConsultant, retry: false });
   const timeEntryQuery = trpc.timeEntries.list.useQuery({ page: 1, pageSize: 100 }, { enabled: isAuthenticated, retry: false });
+  const additionalTimeEntryPages = trpc.useQueries((queries) => {
+    const pageCount = Math.ceil((timeEntryQuery.data?.total ?? 0) / 100);
+    return Array.from({ length: isConsultant ? Math.max(0, pageCount - 1) : 0 }, (_, index) =>
+      queries.timeEntries.list({ page: index + 2, pageSize: 100 }, {
+        enabled: isAuthenticated && isConsultant,
+        retry: false,
+      }),
+    );
+  });
+  const retainerQuery = trpc.retainers.list.useQuery(undefined, { enabled: isAuthenticated && !isConsultant, retry: false });
 
+  // Retainer usage queries - fetch for all retainers
   // Mutations
   const consultantCreate = trpc.consultants.create.useMutation();
   const consultantUpdate = trpc.consultants.update.useMutation();
+  const consultantDeactivate = trpc.consultants.deactivate.useMutation();
   const clientCreate = trpc.clients.create.useMutation();
   const clientUpdate = trpc.clients.update.useMutation();
   const projectCreate = trpc.projects.create.useMutation();
@@ -355,6 +399,10 @@ function App() {
   const timeEntryApprove = trpc.timeEntries.approve.useMutation();
   const timeEntryReject = trpc.timeEntries.reject.useMutation();
   const timeEntryReturn = trpc.timeEntries.returnToDraft.useMutation();
+  const retainerCreate = trpc.retainers.create.useMutation();
+  const retainerUpdate = trpc.retainers.update.useMutation();
+  const retainerActivate = trpc.retainers.activate.useMutation();
+  const retainerTerminate = trpc.retainers.terminate.useMutation();
 
   const refetchBackend = async () => {
     if (!isAuthenticated) return;
@@ -363,6 +411,7 @@ function App() {
       !isConsultant ? clientQuery.refetch() : Promise.resolve(),
       !isConsultant ? projectQuery.refetch() : Promise.resolve(),
       timeEntryQuery.refetch(),
+      !isConsultant ? retainerQuery.refetch() : Promise.resolve(),
     ]);
   };
 
@@ -386,23 +435,29 @@ function App() {
       (consultantQuery.isLoading ||
         (!isConsultant && clientQuery.isLoading) ||
         (!isConsultant && projectQuery.isLoading) ||
+        (!isConsultant && retainerQuery.isLoading) ||
         timeEntryQuery.isLoading),
     error:
       consultantQuery.error ??
       (!isConsultant ? clientQuery.error : null) ??
       (!isConsultant ? projectQuery.error : null) ??
+      (!isConsultant ? retainerQuery.error : null) ??
       timeEntryQuery.error,
     ready:
       isAuthenticated &&
       consultantQuery.isSuccess &&
-      (isConsultant || (clientQuery.isSuccess && projectQuery.isSuccess)) &&
+      (isConsultant || (clientQuery.isSuccess && projectQuery.isSuccess && retainerQuery.isSuccess)) &&
       timeEntryQuery.isSuccess,
   };
 
   const consultants = backendStatus.ready ? (consultantQuery.data ?? []) : [];
   const clients = backendStatus.ready ? (clientQuery.data ?? []) : [];
   const projects = backendStatus.ready ? (projectQuery.data ?? []) : [];
-  const timeEntries = backendStatus.ready ? (timeEntryQuery.data?.items ?? []) : [];
+  const timeEntries = backendStatus.ready ? [
+    ...(timeEntryQuery.data?.items ?? []),
+    ...additionalTimeEntryPages.flatMap((page) => page.data?.items ?? []),
+  ] : [];
+  const retainers = backendStatus.ready ? (retainerQuery.data ?? []) : [];
 
   const handleCreateConsultant = async (values: ConsultantFormValues) => {
     await consultantCreate.mutateAsync(values);
@@ -411,6 +466,11 @@ function App() {
 
   const handleUpdateConsultant = async (id: string, values: ConsultantFormValues) => {
     await consultantUpdate.mutateAsync({ id, data: values });
+    await consultantQuery.refetch();
+  };
+
+  const handleDeactivateConsultant = async (id: string) => {
+    await consultantDeactivate.mutateAsync({ id });
     await consultantQuery.refetch();
   };
 
@@ -435,20 +495,27 @@ function App() {
   };
 
   const toApiTimeEntry = (values: TimeEntryFormValues) => ({
-    ...values,
+    consultantId: values.consultantId,
+    clientId: values.clientId,
+    projectId: values.projectId,
+    workDate: values.workDate,
+    description: values.description,
     hours: Number(values.hours),
-    billingRate: values.billingClassification === "Billable" ? Number(values.billingRate) : null,
+    ...(canViewFinancials ? { billingRate: values.billingClassification === "Billable" ? Number(values.billingRate) : null } : {}),
+    billingClassification: values.billingClassification,
     currency: values.billingClassification === "Billable" ? values.currency : null,
   });
 
   const handleCreateTimeEntry = async (values: TimeEntryFormValues) => {
-    await timeEntryCreate.mutateAsync(toApiTimeEntry(values));
+    const created = await timeEntryCreate.mutateAsync(toApiTimeEntry(values));
     await timeEntryQuery.refetch();
+    return created;
   };
 
   const handleUpdateTimeEntry = async (id: string, values: TimeEntryFormValues) => {
-    await timeEntryUpdate.mutateAsync({ id, data: toApiTimeEntry(values) });
+    const updated = await timeEntryUpdate.mutateAsync({ id, data: toApiTimeEntry(values) });
     await timeEntryQuery.refetch();
+    return updated;
   };
 
   const handleTransitionTimeEntry = async (
@@ -473,6 +540,34 @@ function App() {
     }
   };
 
+  const toApiRetainer = (values: RetainerFormValues) => ({
+    ...values,
+    contractedHours: values.type === "HOURS" ? Number(values.contractedHours) : null,
+    contractedAmount: values.type === "AMOUNT" ? Number(values.contractedAmount) : null,
+    alertThresholdPercent: Number(values.alertThresholdPercent),
+    projectId: values.projectId || null,
+  });
+
+  const handleCreateRetainer = async (values: RetainerFormValues) => {
+    await retainerCreate.mutateAsync(toApiRetainer(values));
+    await retainerQuery.refetch();
+  };
+
+  const handleUpdateRetainer = async (id: string, values: RetainerFormValues) => {
+    await retainerUpdate.mutateAsync({ id, data: toApiRetainer(values) });
+    await retainerQuery.refetch();
+  };
+
+  const handleActivateRetainer = async (id: string) => {
+    await retainerActivate.mutateAsync({ id });
+    await retainerQuery.refetch();
+  };
+
+  const handleTerminateRetainer = async (id: string) => {
+    await retainerTerminate.mutateAsync({ id });
+    await retainerQuery.refetch();
+  };
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
@@ -493,9 +588,11 @@ function App() {
               timeEntries={timeEntries}
               clients={clients}
               projects={projects}
+              retainers={retainers}
               backendStatus={backendStatus}
               onCreateConsultant={handleCreateConsultant}
               onUpdateConsultant={handleUpdateConsultant}
+              onDeactivateConsultant={handleDeactivateConsultant}
               onCreateClient={handleCreateClient}
               onUpdateClient={handleUpdateClient}
               onCreateProject={handleCreateProject}
@@ -503,6 +600,10 @@ function App() {
               onTimeEntryCreate={handleCreateTimeEntry}
               onTimeEntryUpdate={handleUpdateTimeEntry}
               onTimeEntryTransition={handleTransitionTimeEntry}
+              onCreateRetainer={handleCreateRetainer}
+              onUpdateRetainer={handleUpdateRetainer}
+              onActivateRetainer={handleActivateRetainer}
+              onTerminateRetainer={handleTerminateRetainer}
               onRetry={refetchBackend}
             />
           </AuthProvider>

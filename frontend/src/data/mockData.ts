@@ -1,4 +1,4 @@
-import type { Client, Consultant, DashboardMetrics, OperationalAlert, Project, RevenuePoint, Retainer, TimeEntry, UtilizationPoint } from "@/types";
+import type { AlertSeverity, Client, Consultant, ConsultantStatus, DashboardMetrics, OperationalAlert, Project, RevenuePoint, RetainerType, TimeEntry, UtilizationPoint } from "@/types";
 
 export const developmentDataNotice = "Development sample data · Not connected to production records";
 
@@ -15,7 +15,7 @@ export const dashboardMetrics: DashboardMetrics = {
   retainersAtRisk: 3,
 };
 
-type ConsultantSeed = Pick<Consultant, "id" | "employeeCode" | "firstName" | "lastName" | "email" | "role" | "department" | "employmentStatus" | "weeklyCapacityHours" | "billingRate" | "currency" | "startDate" | "assignedProjects" | "createdAt" | "updatedAt" | "billableHours" | "status" | "color"> & Partial<Pick<Consultant, "availableHours" | "revenue" | "nonBillableHours">>;
+type ConsultantSeed = Pick<Consultant, "id" | "employeeCode" | "firstName" | "lastName" | "email" | "role" | "department" | "employmentStatus" | "weeklyCapacityHours" | "billingRate" | "currency" | "startDate" | "createdAt" | "updatedAt" | "color"> & { assignedProjects: string[]; billableHours: number; status: ConsultantStatus } & Partial<Pick<Consultant, "availableHours" | "revenue" | "nonBillableHours">>;
 
 function createConsultant(seed: ConsultantSeed): Consultant {
   const name = `${seed.firstName} ${seed.lastName}`;
@@ -27,7 +27,7 @@ function createConsultant(seed: ConsultantSeed): Consultant {
     initials: `${seed.firstName[0]}${seed.lastName[0]}`,
     availableHours,
     utilization,
-    revenue: seed.revenue ?? seed.billableHours * seed.billingRate,
+    revenue: seed.revenue ?? seed.billableHours * (seed.billingRate ?? 0),
   };
 }
 
@@ -64,11 +64,24 @@ export const revenueSeries: RevenuePoint[] = [
   { label: "Apr 22", estimated: 28460, invoiced: 26900 },
 ];
 
-export const retainers: Retainer[] = [
-  { id: "r-201", client: "Northwind Health", name: "Advisory hours · Q2", type: "Hours", contracted: 320, consumed: 291, remaining: 29, consumedPercent: 90.9, expiry: "May 31, 2026", severity: "Critical" },
-  { id: "r-202", client: "Aster Labs", name: "Growth partner retainer", type: "Amount", contracted: 48000, consumed: 38200, remaining: 9800, consumedPercent: 79.6, expiry: "Jun 15, 2026", severity: "Attention" },
-  { id: "r-203", client: "Meridian Works", name: "Transformation office", type: "Hours", contracted: 240, consumed: 179, remaining: 61, consumedPercent: 74.6, expiry: "Jun 30, 2026", severity: "Attention" },
-  { id: "r-204", client: "Lumen Retail", name: "Strategy support", type: "Amount", contracted: 36000, consumed: 17200, remaining: 18800, consumedPercent: 47.8, expiry: "Jul 31, 2026", severity: "Healthy" },
+interface RetainerSummaryMock {
+  id: string;
+  client: string;
+  name: string;
+  type: RetainerType;
+  contracted: number;
+  consumed: number;
+  remaining: number;
+  consumedPercent: number;
+  expiry: string;
+  severity: AlertSeverity | "Healthy";
+}
+
+export const retainers: RetainerSummaryMock[] = [
+  { id: "r-201", client: "Northwind Health", name: "Advisory hours · Q2", type: "HOURS", contracted: 320, consumed: 291, remaining: 29, consumedPercent: 90.9, expiry: "May 31, 2026", severity: "Critical" },
+  { id: "r-202", client: "Aster Labs", name: "Growth partner retainer", type: "AMOUNT", contracted: 48000, consumed: 38200, remaining: 9800, consumedPercent: 79.6, expiry: "Jun 15, 2026", severity: "Attention" },
+  { id: "r-203", client: "Meridian Works", name: "Transformation office", type: "HOURS", contracted: 240, consumed: 179, remaining: 61, consumedPercent: 74.6, expiry: "Jun 30, 2026", severity: "Attention" },
+  { id: "r-204", client: "Lumen Retail", name: "Strategy support", type: "AMOUNT", contracted: 36000, consumed: 17200, remaining: 18800, consumedPercent: 47.8, expiry: "Jul 31, 2026", severity: "Healthy" },
 ];
 
 export const alerts: OperationalAlert[] = [

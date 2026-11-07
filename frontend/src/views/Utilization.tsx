@@ -86,8 +86,8 @@ export default function Utilization({ period, onPeriodChange, consultants, timeE
       const matchesTier = tierFilter === "All" || r.tier === tierFilter;
       return matchesQuery && matchesDept && matchesTier;
     }).sort((a, b) => {
-      let valA: string | number = a[sortKey];
-      let valB: string | number = b[sortKey];
+      let valA: string | number = sortKey === "name" ? a.name : sortKey === "billableHours" ? a.approvedBillableHours : sortKey === "availableHours" ? a.availableHours : a.utilization;
+      let valB: string | number = sortKey === "name" ? b.name : sortKey === "billableHours" ? b.approvedBillableHours : sortKey === "availableHours" ? b.availableHours : b.utilization;
       if (typeof valA === "string") {
         return sortAsc ? valA.localeCompare(valB as string) : (valB as string).localeCompare(valA);
       }

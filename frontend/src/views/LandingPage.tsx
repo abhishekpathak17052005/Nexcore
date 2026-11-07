@@ -34,11 +34,24 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
   const { user, refresh } = useAuth();
 
   // Dialog / Modal state
-  const [authMode, setAuthMode] = useState<"none" | "login" | "setup" | "registerOrg" | "employeeSignup">("none");
+  const [authMode, setAuthMode] = useState<"none" | "login" | "forgotPassword" | "verifyResetCode" | "resetPassword" | "setup" | "registerOrg" | "employeeSignup">("none");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [adminName, setAdminName] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [resetToken, setResetToken] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("resetToken");
+    if (token) {
+      setResetToken(token);
+      setAuthMode("resetPassword");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   // Register Org State
   const [orgName, setOrgName] = useState("");
@@ -113,6 +126,21 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
     onError: (error) => {
       setErrorMessage(error.message || "Failed to create employee account.");
     },
+  });
+
+  const requestResetMutation = trpc.auth.requestPasswordReset.useMutation({
+    onSuccess: (result) => {
+      setErrorMessage(null);
+      setResetNotice(result.delivery === "console"
+        ? "A six-digit code was generated. Check the backend terminal and enter it below."
+        : "If an account exists for that email, a password reset link has been sent.");
+      if (result.delivery === "console") setAuthMode("verifyResetCode");
+    },
+    onError: (error) => setErrorMessage(error.message || "Could not send a reset link. Please try again."),
+  });
+  const resetPasswordMutation = trpc.auth.resetPassword.useMutation({
+    onSuccess: () => { setErrorMessage(null); setResetNotice("Your password has been updated. You can sign in now."); setPassword(""); setNewPassword(""); setResetCode(""); setAuthMode("login"); },
+    onError: (error) => setErrorMessage(error.message || "Could not reset your password."),
   });
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -287,7 +315,7 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
           </div>
         </div>
 
-        {/* Live Interactive-Feeling Executive Operations Preview (Secondary Pure White Surface) */}
+        {/* Illustrative dashboard preview with explicitly labeled sample values */}
         <div
           style={{
             width: "100%",
@@ -313,12 +341,8 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "12px", fontWeight: 650, color: "#10B981", background: "#ECFDF5", border: "1px solid #A7F3D0", padding: "4px 10px", borderRadius: "9999px", display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10B981" }} />
-                All Systems Synced
-              </span>
-              <span style={{ fontSize: "12px", color: "#64748B", background: "#F8FAFC", border: "1px solid #E2E8F0", padding: "4px 10px", borderRadius: "8px" }}>
-                Multi-Tenant Scoped
+              <span style={{ fontSize: "12px", fontWeight: 650, color: "#475569", background: "#F1F5F9", border: "1px solid #CBD5E1", padding: "4px 10px", borderRadius: "9999px" }}>
+                Illustrative preview · sample data, not live
               </span>
             </div>
           </div>
@@ -533,6 +557,9 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
                     <h3>NEXCORE Sign In</h3>
                   </>
                 )}
+                {authMode === "forgotPassword" && <><KeyRound size={20} className="text-blue-600" /><h3>Reset your password</h3></>}
+                {authMode === "verifyResetCode" && <><KeyRound size={20} className="text-blue-600" /><h3>Enter your reset code</h3></>}
+                {authMode === "resetPassword" && <><KeyRound size={20} className="text-blue-600" /><h3>Choose a new password</h3></>}
                 {authMode === "registerOrg" && (
                   <>
                     <Building2 size={20} className="text-blue-600" />
@@ -568,6 +595,7 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
                 <span>{errorMessage}</span>
               </div>
             )}
+            {resetNotice && <div className="auth-success-banner" role="status">{resetNotice}</div>}
 
             {/* LOGIN FORM */}
             {authMode === "login" && (
@@ -614,9 +642,12 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
                   )}
                 </button>
 
-                <div className="auth-switch-note" style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+                <div className="auth-switch-note" style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
                   <button type="button" onClick={() => { setErrorMessage(null); setAuthMode("registerOrg"); }}>
                     Create Organization
+                  </button>
+                  <button type="button" onClick={() => { setErrorMessage(null); setResetNotice(null); setAuthMode("forgotPassword"); }}>
+                    Forgot password?
                   </button>
                   <button type="button" onClick={() => { setErrorMessage(null); setAuthMode("employeeSignup"); }}>
                     Join as Employee
@@ -624,6 +655,28 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
                 </div>
               </form>
             )}
+
+            {authMode === "forgotPassword" && <form className="auth-form" onSubmit={(e) => { e.preventDefault(); setErrorMessage(null); setResetNotice(null); void requestResetMutation.mutateAsync({ email: email.trim() }); }}>
+              <p>Enter the email address on your account and we’ll send you a reset link.</p>
+              <div className="form-field"><label htmlFor="reset-email">Work Email</label><input id="reset-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></div>
+              <button className="btn-auth-submit" type="submit" disabled={requestResetMutation.isPending}>{requestResetMutation.isPending ? <><Loader2 size={16} className="spin" />Sending...</> : "Send reset link"}</button>
+              <div className="auth-switch-note"><button type="button" onClick={() => { setAuthMode("login"); setErrorMessage(null); setResetNotice(null); }}>Back to sign in</button></div>
+            </form>}
+
+            {authMode === "resetPassword" && <form className="auth-form" onSubmit={(e) => { e.preventDefault(); setErrorMessage(null); void resetPasswordMutation.mutateAsync({ token: resetToken, password: newPassword }); }}>
+              <p>Your new password must be at least 8 characters.</p>
+              <div className="form-field"><label htmlFor="new-password">New Password</label><input id="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" minLength={8} maxLength={128} required /></div>
+              <button className="btn-auth-submit" type="submit" disabled={resetPasswordMutation.isPending}>{resetPasswordMutation.isPending ? <><Loader2 size={16} className="spin" />Updating...</> : "Update password"}</button>
+              <div className="auth-switch-note"><button type="button" onClick={() => { setAuthMode("forgotPassword"); setErrorMessage(null); }}>Request a new link</button></div>
+            </form>}
+
+            {authMode === "verifyResetCode" && <form className="auth-form" onSubmit={(e) => { e.preventDefault(); setErrorMessage(null); void resetPasswordMutation.mutateAsync({ code: resetCode, password: newPassword }); }}>
+              <p>Enter the six-digit code printed in the backend terminal, then choose a new password. The code expires in 15 minutes.</p>
+              <div className="form-field"><label htmlFor="reset-code">One-time code</label><input id="reset-code" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={resetCode} onChange={(e) => setResetCode(e.target.value.replace(/\D/g, "").slice(0, 6))} required /></div>
+              <div className="form-field"><label htmlFor="otp-new-password">New Password</label><input id="otp-new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" minLength={8} maxLength={128} required /></div>
+              <button className="btn-auth-submit" type="submit" disabled={resetPasswordMutation.isPending}>{resetPasswordMutation.isPending ? <><Loader2 size={16} className="spin" />Updating...</> : "Update password"}</button>
+              <div className="auth-switch-note"><button type="button" onClick={() => { setAuthMode("forgotPassword"); setErrorMessage(null); setResetNotice(null); }}>Request a new code</button></div>
+            </form>}
 
             {/* REGISTER ORGANIZATION FORM */}
             {authMode === "registerOrg" && (

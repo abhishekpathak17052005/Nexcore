@@ -5,7 +5,9 @@ export type ConsultantStatus = "On track" | "Watch" | "Over capacity";
 export type EmploymentStatus = "Active" | "On leave" | "Inactive";
 export type BillingClassification = "Billable" | "Non-billable";
 export type TimeEntryStatus = "Draft" | "Submitted" | "Approved" | "Rejected";
-export type RetainerType = "Hours" | "Amount";
+export type RetainerType = "HOURS" | "AMOUNT";
+export type RetainerStatus = "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
+export type BillingFrequency = "MONTHLY" | "QUARTERLY" | "ANNUALLY";
 export type AlertSeverity = "Info" | "Attention" | "Critical";
 export type AlertStatus = "Open" | "In review" | "Resolved";
 
@@ -21,22 +23,22 @@ export interface Consultant {
   department: string;
   employmentStatus: EmploymentStatus;
   weeklyCapacityHours: number;
-  billingRate: number;
+  billingRate: number | null;
   currency: "USD" | "EUR" | "GBP";
   startDate: string;
-  assignedProjects: string[];
+  assignedProjects?: string[];
   createdAt: string;
   updatedAt: string;
-  availableHours: number;
-  billableHours: number;
+  availableHours?: number;
+  billableHours?: number;
   nonBillableHours?: number;
-  utilization: number;
-  revenue: number;
-  status: ConsultantStatus;
+  utilization?: number;
+  revenue?: number | null;
+  status?: ConsultantStatus;
   color: string;
 }
 
-export type ConsultantSortKey = "name" | "employeeCode" | "role" | "department" | "availableHours" | "utilization" | "billableHours" | "revenue";
+export type ConsultantSortKey = "name" | "employeeCode" | "role" | "department" | "weeklyCapacityHours";
 
 export interface ConsultantFormValues {
   employeeCode: string;
@@ -68,15 +70,48 @@ export interface RevenuePoint {
 
 export interface Retainer {
   id: string;
-  client: string;
+  organizationId: string | null;
+  clientId: string;
+  projectId: string | null;
   name: string;
   type: RetainerType;
-  contracted: number;
-  consumed: number;
-  remaining: number;
-  consumedPercent: number;
-  expiry: string;
-  severity: "Healthy" | "Attention" | "Critical";
+  contractedHours: number | null;
+  contractedAmount: number | null;
+  currency: CurrencyCode;
+  billingFrequency: BillingFrequency;
+  startDate: string;
+  endDate: string;
+  rolloverAllowed: boolean;
+  alertThresholdPercent: number;
+  status: RetainerStatus;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface RetainerFormValues {
+  clientId: string;
+  projectId: string;
+  name: string;
+  type: RetainerType;
+  contractedHours: string;
+  contractedAmount: string;
+  currency: CurrencyCode;
+  billingFrequency: BillingFrequency;
+  startDate: string;
+  endDate: string;
+  rolloverAllowed: boolean;
+  alertThresholdPercent: string;
+}
+
+export interface RetainerUsage {
+  retainerId: string;
+  approvedHours: number;
+  approvedAmount: number;
+  remainingHours: number | null;
+  remainingAmount: number | null;
+  utilizationPercent: number;
+  exceedsContract: boolean;
 }
 
 export interface OperationalAlert {
@@ -141,6 +176,8 @@ export interface TimeEntry {
   reviewedAt?: string | null;
   reviewedBy?: string | null;
   rejectionReason?: string | null;
+  clientReference?: Pick<Client, "id" | "name" | "status" | "defaultCurrency"> | null;
+  projectReference?: Pick<Project, "id" | "clientId" | "name" | "status" | "billingCurrency"> | null;
 }
 
 export interface TimeEntryFormValues {

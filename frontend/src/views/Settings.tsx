@@ -186,7 +186,7 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
             <p className="eyebrow">Platform governance <span className="eyebrow-dot" /></p>
             <h1>Workspace Settings</h1>
             <p className="page-subtitle">
-              Current user profile, role authorization, reporting preferences, and system deployment status.
+              User profile, role permissions, reporting preferences, and administrative controls.
             </p>
           </div>
         </div>
@@ -196,7 +196,7 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
           <article className="panel" style={{ padding: "24px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
               <User size={20} color="#2B6CB0" />
-              <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>Authenticated User Profile</h2>
+              <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>User Profile</h2>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "14px" }}>
@@ -214,14 +214,12 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
                   {user?.role || "unassigned"}
                 </span>
               </div>
-              <div>
-                <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>User ID</span>
-                <code style={{ fontSize: "12px" }}>{user?.id || "Anonymous"}</code>
-              </div>
               {user?.consultantId && (
                 <div>
-                  <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>Assigned Consultant Record</span>
-                  <code style={{ fontSize: "12px", color: "#2B6CB0" }}>{user.consultantId}</code>
+                  <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>Linked Consultant</span>
+                  <span style={{ color: "#2B6CB0", fontWeight: 600 }}>
+                    {consultants.find(c => c.id === user.consultantId)?.name || user.consultantId}
+                  </span>
                 </div>
               )}
             </div>
@@ -264,7 +262,7 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
           </article>
         </div>
 
-        {/* Reporting Preferences & Deployment Status */}
+        {/* Reporting Preferences & Organization Info */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
           {/* Preferences */}
           <article className="panel" style={{ padding: "24px" }}>
@@ -311,38 +309,33 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
             </form>
           </article>
 
-          {/* Database & Runtime Deployment Status */}
+          {/* Organization Info */}
           <article className="panel" style={{ padding: "24px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
-              <Database size={20} color="#2B6CB0" />
-              <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>System Deployment Status</h2>
+              <Building2 size={20} color="#2B6CB0" />
+              <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>Organization</h2>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "13px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #EDF2F7", paddingBottom: 6 }}>
-                <span style={{ color: "#718096" }}>Platform Name</span>
-                <strong style={{ color: "#0F9D91" }}>Nexcore Enterprise</strong>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "14px" }}>
+              <div>
+                <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>Organization Name</span>
+                <strong>{orgQuery.data?.name || "Nexcore Technologies"}</strong>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #EDF2F7", paddingBottom: 6 }}>
-                <span style={{ color: "#718096" }}>Backend Runtime</span>
-                <strong>Node.js / Express.js / tRPC</strong>
+              <div>
+                <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>Organization ID</span>
+                <code style={{ fontSize: "12px" }}>{orgQuery.data?.slug || "nexcore-tech"}</code>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #EDF2F7", paddingBottom: 6 }}>
-                <span style={{ color: "#718096" }}>Frontend Framework</span>
-                <strong>Next.js 16 App Router (Turbopack)</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #EDF2F7", paddingBottom: 6 }}>
-                <span style={{ color: "#718096" }}>Database Engine</span>
-                <strong>MongoDB v8.3.1 (Local)</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #EDF2F7", paddingBottom: 6 }}>
-                <span style={{ color: "#718096" }}>Database Name</span>
-                <code>consultant_utilization_dashboard</code>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #EDF2F7", paddingBottom: 6 }}>
-                <span style={{ color: "#718096" }}>Multi-Document Transactions</span>
-                <span style={{ color: "#D69E2E", fontWeight: 600 }}>Standalone (Replica Set required for atomic approvals)</span>
-              </div>
+              {isAdmin && (
+                <div style={{ marginTop: "8px", padding: "10px", background: "#EBF8FF", borderRadius: "6px", border: "1px solid #BEE3F8" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#2B6CB0", fontSize: "12px", fontWeight: 600 }}>
+                    <Shield size={14} />
+                    <span>Administrator Access</span>
+                  </div>
+                  <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#2C5282" }}>
+                    You have full administrative privileges for user management and organization settings.
+                  </p>
+                </div>
+              )}
             </div>
           </article>
         </div>
@@ -350,35 +343,6 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
         {/* Organization Administration & Join Requests (Admin-only) */}
         {isAdmin && (
           <>
-            {/* Organization Overview */}
-            <article className="panel" style={{ padding: "24px", marginBottom: "24px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                  <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "rgba(14, 165, 233, 0.15)", color: "#0284C7", display: "grid", placeItems: "center" }}>
-                    <Building2 size={24} />
-                  </div>
-                  <div>
-                    <span style={{ fontSize: "11px", color: "#64748B", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em" }}>
-                      Active Organization
-                    </span>
-                    <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#0F172A", margin: "2px 0 0" }}>
-                      {orgQuery.data?.name ?? "Nexcore Technologies"}
-                    </h2>
-                    <span style={{ fontSize: "12px", color: "#64748B" }}>
-                      Identifier: <code>{orgQuery.data?.slug ?? "nexcore-tech"}</code>
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ padding: "6px 12px", borderRadius: "9999px", background: "rgba(16, 185, 129, 0.12)", color: "#059669", fontSize: "12px", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                    <Shield size={14} />
-                    <span>Authorized Organization Admin</span>
-                  </span>
-                </div>
-              </div>
-            </article>
-
             {/* Join Requests Review Panel */}
             <article className="panel" style={{ marginBottom: "24px" }}>
               <PanelHeader
@@ -736,7 +700,7 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
               </div>
             )}
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px 16px 20px" }}>
+            <div className="user-admin-toolbar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px 16px 20px" }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700 }}>Authorized User Accounts</h3>
                 <p style={{ margin: "4px 0 0", fontSize: "12px", color: "#718096" }}>
@@ -838,8 +802,8 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
               </div>
             )}
 
-            <div className="table-scroll">
-              <table>
+            <div className="table-scroll user-management-table-scroll">
+              <table className="user-management-table">
                 <thead>
                   <tr>
                     <th>User</th>
@@ -858,17 +822,15 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
 
                     return (
                       <tr key={u.id}>
-                        <td>
+                        <td data-label="User">
                           <strong>{u.name || "Anonymous User"}</strong>
                           <div style={{ fontSize: "11px", color: "#718096" }}>{u.openId}</div>
                         </td>
-                        <td>{u.email || "—"}</td>
-                        <td>
-                          <span className="badge" style={{ textTransform: "uppercase" }}>{u.role}</span>
+                        <td data-label="Email">{u.email || "—"}</td>
+                        <td data-label="Current role"><span className="badge" style={{ textTransform: "uppercase" }}>{u.role}</span>
                           {isSelf && <span style={{ marginLeft: 6, fontSize: "11px", color: "#718096" }}>(You)</span>}
                         </td>
-                        <td>
-                          <span
+                        <td data-label="Status"><span
                             style={{
                               display: "inline-flex",
                               padding: "2px 8px",
@@ -883,15 +845,13 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
                             {userStatus}
                           </span>
                         </td>
-                        <td>
-                          {u.consultantId ? (
+                        <td data-label="Linked consultant">{u.consultantId ? (
                             consultants.find((c) => c.id === u.consultantId)?.name ?? u.consultantId
                           ) : (
                             <span style={{ color: "#A0AEC0" }}>None</span>
                           )}
                         </td>
-                        <td>
-                          {isSelf ? (
+                        <td data-label="Action">{isSelf ? (
                             <span style={{ fontSize: "12px", color: "#A0AEC0" }}>Role locked (Anti-lockout)</span>
                           ) : isEditing ? (
                             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
