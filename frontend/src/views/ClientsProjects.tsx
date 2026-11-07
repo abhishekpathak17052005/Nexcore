@@ -1,12 +1,14 @@
-import { useMemo, useState } from "react";
-import { Plus, Search, Filter, Building2, Briefcase, Calendar, Edit2, AlertCircle, RefreshCw, CheckCircle2 } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Plus, Search, Filter, Building2, Briefcase, Calendar, Edit2, AlertCircle, RefreshCw, Eye, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { EmptyState, PanelHeader, StatusBadge } from "@/components/DashboardPrimitives";
+import { EmptyState, PageHeader, PanelHeader, StatusBadge } from "@/components/DashboardPrimitives";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Client, Project, ReportingPeriod, CurrencyCode } from "@/types";
 import { backendErrorMessage, type BackendStatus } from "@/lib/backendService";
+import { trpc } from "@/lib/trpc";
 
 interface ClientsProjectsProps {
+  initialTab?: "clients" | "projects";
   period: ReportingPeriod;
   onPeriodChange: (period: ReportingPeriod) => void;
   clients: Client[];
@@ -20,6 +22,7 @@ interface ClientsProjectsProps {
 }
 
 export default function ClientsProjects({
+  initialTab = "clients",
   period,
   onPeriodChange,
   clients,
@@ -31,11 +34,27 @@ export default function ClientsProjects({
   onUpdateProject,
   onRetry,
 }: ClientsProjectsProps) {
-  const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"clients" | "projects">("clients");
+  const { can } = useAuth();
+  const [activeTab, setActiveTab] = useState<"clients" | "projects">(initialTab);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [selectedClientId, setSelectedClientId] = useState<string>("All");
+  const [selectedDetail, setSelectedDetail] = useState<{ kind: "client" | "project"; id: string } | null>(null);
+  const clientDetailQuery = trpc.clients.get.useQuery(
+    { id: selectedDetail?.kind === "client" ? selectedDetail.id : "" },
+    { enabled: selectedDetail?.kind === "client", retry: false },
+  );
+  const projectDetailQuery = trpc.projects.get.useQuery(
+    { id: selectedDetail?.kind === "project" ? selectedDetail.id : "" },
+    { enabled: selectedDetail?.kind === "project", retry: false },
+  );
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+    setQuery("");
+    setStatusFilter("All");
+    setSelectedClientId("All");
+  }, [initialTab]);
 
   // Client Modal State
   const [clientModalOpen, setClientModalOpen] = useState(false);
@@ -63,8 +82,8 @@ export default function ClientsProjects({
   const [projectFormError, setProjectFormError] = useState<string | null>(null);
   const [savingProject, setSavingProject] = useState(false);
 
-  const canManageClients = user?.role === "admin" || user?.role === "manager" || user?.role === "finance";
-  const canManageProjects = user?.role === "admin" || user?.role === "manager" || user?.role === "finance";
+  const canManageClients = can("clients.manage");
+  const canManageProjects = can("projects.manage");
 
   // Filtered Clients
   const filteredClients = useMemo(() => {
@@ -101,7 +120,7 @@ export default function ClientsProjects({
     } else {
       setEditingClient(null);
       setClientForm({
-        clientCode: `CL-${Math.floor(100 + Math.random() * 900)}`,
+        clientCode: "",
         name: "",
         status: "Active",
         defaultCurrency: "USD",
@@ -185,6 +204,10 @@ export default function ClientsProjects({
         await onUpdateProject(editingProject.id, payload);
       } else {
         await onCreateProject(payload);
+        // A prior project-directory filter may exclude a newly-created record.
+        setQuery("");
+        setStatusFilter("All");
+        setSelectedClientId("All");
       }
       setProjectModalOpen(false);
     } catch (err: unknown) {
@@ -197,13 +220,11 @@ export default function ClientsProjects({
   return (
     <AppShell period={period} onPeriodChange={onPeriodChange}>
       <div className="dashboard-page">
-        <div className="page-heading-row">
-          <div>
-            <p className="eyebrow">Client operations <span className="eyebrow-dot" /></p>
-            <h1>Clients & Projects</h1>
-            <p className="page-subtitle">Manage client accounts, project engagements, and contract currencies backed by MongoDB.</p>
-          </div>
-          <div className="heading-actions">
+        <PageHeader
+          eyebrow="Client operations"
+          title={activeTab === "clients" ? "Clients" : "Projects"}
+          description="Manage client accounts, project engagements, and contract currencies."
+          actions={<>
             {activeTab === "clients" && canManageClients && (
               <button className="button button-primary" onClick={() => openClientModal()}>
                 <Plus size={16} /> Add client
@@ -214,8 +235,8 @@ export default function ClientsProjects({
                 <Plus size={16} /> Add project
               </button>
             )}
-          </div>
-        </div>
+          </>}
+        />
 
         {backendStatus.error ? (
           <div className="panel error-panel" style={{ padding: "24px", marginBottom: "20px" }}>
@@ -279,7 +300,7 @@ export default function ClientsProjects({
                 <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="All">All statuses</option>
                   <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
+                  {activeTab === "clients" && <option value="Inactive">Inactive</option>}
                   {activeTab === "projects" && <option value="On hold">On hold</option>}
                   {activeTab === "projects" && <option value="Closed">Closed</option>}
                 </select>
@@ -288,8 +309,16 @@ export default function ClientsProjects({
           </div>
         </div>
 
+        {backendStatus.loading && !backendStatus.error ? (
+          <div className="panel" role="status" aria-label={`Loading ${activeTab}`} style={{ padding: 24 }}>
+            <div className="overview-skeleton-block" style={{ height: 20, maxWidth: 240, marginBottom: 18 }} />
+            {[0, 1, 2, 3].map((row) => <div key={row} className="overview-skeleton-block" style={{ height: 48, marginBottom: 10 }} />)}
+            <span className="sr-only">Loading {activeTab}…</span>
+          </div>
+        ) : null}
+
         {/* Clients Table Tab */}
-        {activeTab === "clients" && (
+        {!backendStatus.loading && !backendStatus.error && activeTab === "clients" && (
           <article className="panel">
             <PanelHeader
               eyebrow="Portfolio Directory"
@@ -306,7 +335,7 @@ export default function ClientsProjects({
                       <th>Default Currency</th>
                       <th>Associated Projects</th>
                       <th>Status</th>
-                      {canManageClients && <th style={{ textAlign: "right" }}>Actions</th>}
+                      <th style={{ textAlign: "right" }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -315,7 +344,7 @@ export default function ClientsProjects({
                       return (
                         <tr key={client.id}>
                           <td><code style={{ background: "#EDF2F7", padding: "2px 6px", borderRadius: 4 }}>{client.clientCode}</code></td>
-                          <td><strong>{client.name}</strong></td>
+                          <td><button type="button" className="button button-quiet" onClick={() => setSelectedDetail({ kind: "client", id: client.id })} aria-label={`View ${client.name} details`}><strong>{client.name}</strong></button></td>
                           <td><span className="badge badge-currency">{client.defaultCurrency}</span></td>
                           <td>
                             <span style={{ color: clientProjects.length > 0 ? "#2B6CB0" : "#A0AEC0" }}>
@@ -327,17 +356,10 @@ export default function ClientsProjects({
                               {client.status}
                             </StatusBadge>
                           </td>
-                          {canManageClients && (
-                            <td style={{ textAlign: "right" }}>
-                              <button
-                                className="button button-quiet"
-                                onClick={() => openClientModal(client)}
-                                title="Edit Client"
-                              >
-                                <Edit2 size={14} /> Edit
-                              </button>
-                            </td>
-                          )}
+                          <td style={{ textAlign: "right" }}>
+                            <button type="button" className="button button-quiet" onClick={() => setSelectedDetail({ kind: "client", id: client.id })} aria-label={`View ${client.name} details`}><Eye size={14} /> Details</button>
+                            {canManageClients && <button type="button" className="button button-quiet" onClick={() => openClientModal(client)} aria-label={`Edit ${client.name}`}><Edit2 size={14} /> Edit</button>}
+                          </td>
                         </tr>
                       );
                     })}
@@ -354,7 +376,7 @@ export default function ClientsProjects({
         )}
 
         {/* Projects Table Tab */}
-        {activeTab === "projects" && (
+        {!backendStatus.loading && !backendStatus.error && activeTab === "projects" && (
           <article className="panel">
             <PanelHeader
               eyebrow="Delivery Engagements"
@@ -371,7 +393,7 @@ export default function ClientsProjects({
                       <th>Billing Currency</th>
                       <th>Schedule</th>
                       <th>Status</th>
-                      {canManageProjects && <th style={{ textAlign: "right" }}>Actions</th>}
+                      <th style={{ textAlign: "right" }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -379,7 +401,7 @@ export default function ClientsProjects({
                       const client = clients.find((c) => c.id === project.clientId);
                       return (
                         <tr key={project.id}>
-                          <td><strong>{project.name}</strong></td>
+                          <td><button type="button" className="button button-quiet" onClick={() => setSelectedDetail({ kind: "project", id: project.id })} aria-label={`View ${project.name} details`}><strong>{project.name}</strong></button></td>
                           <td>
                             <span style={{ color: "#2B6CB0" }}>
                               {client ? client.name : "Unassigned Client"}
@@ -398,17 +420,10 @@ export default function ClientsProjects({
                               {project.status}
                             </StatusBadge>
                           </td>
-                          {canManageProjects && (
-                            <td style={{ textAlign: "right" }}>
-                              <button
-                                className="button button-quiet"
-                                onClick={() => openProjectModal(project)}
-                                title="Edit Project"
-                              >
-                                <Edit2 size={14} /> Edit
-                              </button>
-                            </td>
-                          )}
+                          <td style={{ textAlign: "right" }}>
+                            <button type="button" className="button button-quiet" onClick={() => setSelectedDetail({ kind: "project", id: project.id })} aria-label={`View ${project.name} details`}><Eye size={14} /> Details</button>
+                            {canManageProjects && <button type="button" className="button button-quiet" onClick={() => openProjectModal(project)} aria-label={`Edit ${project.name}`}><Edit2 size={14} /> Edit</button>}
+                          </td>
                         </tr>
                       );
                     })}
@@ -422,6 +437,54 @@ export default function ClientsProjects({
               />
             )}
           </article>
+        )}
+
+        {selectedDetail && (
+          <div className="drawer-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedDetail(null); }}>
+            <section className="panel" role="dialog" aria-modal="true" aria-labelledby="record-detail-title" style={{ width: "min(560px, 100%)", maxHeight: "min(90vh, 760px)", overflowY: "auto", margin: "auto", padding: 24, background: "var(--surface, #fff)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
+                <div>
+                  <div className="eyebrow">{selectedDetail.kind === "client" ? "Client profile" : "Project overview"}</div>
+                  <h2 id="record-detail-title" style={{ margin: "6px 0 0", fontSize: 22 }}>
+                    {selectedDetail.kind === "client" ? clientDetailQuery.data?.name ?? "Client details" : projectDetailQuery.data?.name ?? "Project details"}
+                  </h2>
+                </div>
+                <button type="button" className="button button-quiet" onClick={() => setSelectedDetail(null)} aria-label="Close details"><X size={18} /></button>
+              </div>
+              {(selectedDetail.kind === "client" ? clientDetailQuery.isLoading : projectDetailQuery.isLoading) ? (
+                <div role="status" aria-label="Loading record details"><div className="overview-skeleton-block" style={{ height: 64, marginBottom: 12 }} /><div className="overview-skeleton-block" style={{ height: 120 }} /></div>
+              ) : (selectedDetail.kind === "client" ? clientDetailQuery.error : projectDetailQuery.error) ? (
+                <div className="error-panel" role="alert" style={{ padding: 16 }}>
+                  <p>{backendErrorMessage(selectedDetail.kind === "client" ? clientDetailQuery.error : projectDetailQuery.error)}</p>
+                  <button type="button" className="button button-quiet" onClick={() => selectedDetail.kind === "client" ? void clientDetailQuery.refetch() : void projectDetailQuery.refetch()}>Retry</button>
+                </div>
+              ) : selectedDetail.kind === "client" && clientDetailQuery.data ? (
+                <div className="detail-list">
+                  <DetailItem label="Client code" value={clientDetailQuery.data.clientCode || "—"} />
+                  <DetailItem label="Status" value={<StatusBadge tone={clientDetailQuery.data.status === "Active" ? "success" : "neutral"}>{clientDetailQuery.data.status}</StatusBadge>} />
+                  <DetailItem label="Default currency" value={clientDetailQuery.data.defaultCurrency} />
+                  <div className="detail-list-item" style={{ display: "block", textAlign: "left" }}><span className="muted-cell">Related projects</span>
+                    {projects.filter((project) => project.clientId === clientDetailQuery.data?.id).length ? (
+                      <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>{projects.filter((project) => project.clientId === clientDetailQuery.data?.id).map((project) => <li key={project.id}><button type="button" className="button button-quiet" onClick={() => setSelectedDetail({ kind: "project", id: project.id })}>{project.name}</button> <StatusBadge tone={project.status === "Active" ? "success" : project.status === "On hold" ? "warning" : "neutral"}>{project.status}</StatusBadge></li>)}</ul>
+                    ) : <span>No related projects</span>}
+                  </div>
+                </div>
+              ) : selectedDetail.kind === "project" && projectDetailQuery.data ? (
+                <div className="detail-list">
+                  <DetailItem label="Client" value={clients.find((client) => client.id === projectDetailQuery.data?.clientId)?.name ?? "Client unavailable"} />
+                  <DetailItem label="Status" value={<StatusBadge tone={projectDetailQuery.data.status === "Active" ? "success" : projectDetailQuery.data.status === "On hold" ? "warning" : "neutral"}>{projectDetailQuery.data.status}</StatusBadge>} />
+                  <DetailItem label="Billing currency" value={projectDetailQuery.data.billingCurrency} />
+                  <DetailItem label="Start date" value={projectDetailQuery.data.startDate || "Not scheduled"} />
+                  <DetailItem label="End date" value={projectDetailQuery.data.endDate || "Ongoing / not set"} />
+                </div>
+              ) : <EmptyState title="Record unavailable" description="This record could not be loaded." />}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 24 }}>
+                {selectedDetail.kind === "client" && canManageClients && clientDetailQuery.data && <button type="button" className="button button-primary" onClick={() => { openClientModal(clientDetailQuery.data); setSelectedDetail(null); }}>Edit client</button>}
+                {selectedDetail.kind === "project" && canManageProjects && projectDetailQuery.data && <button type="button" className="button button-primary" onClick={() => { openProjectModal(projectDetailQuery.data); setSelectedDetail(null); }}>Edit project</button>}
+                <button type="button" className="button button-quiet" onClick={() => setSelectedDetail(null)}>Close</button>
+              </div>
+            </section>
+          </div>
         )}
 
         {/* Client Modal */}
@@ -618,5 +681,14 @@ export default function ClientsProjects({
         )}
       </div>
     </AppShell>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "12px 0", borderBottom: "1px solid var(--border-light, #e5eaed)" }}>
+      <span style={{ color: "var(--ink-500, #63747d)", fontSize: 13 }}>{label}</span>
+      <span style={{ color: "var(--ink-900, #1d2b33)", fontSize: 14, fontWeight: 650, textAlign: "right" }}>{value}</span>
+    </div>
   );
 }

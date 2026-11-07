@@ -5,6 +5,7 @@ import { adminProcedure, permissionProcedure, protectedProcedure, publicProcedur
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as erp from "./erpDb";
+import * as retainerDb from "./retainerDb";
 import {
   countAdmins,
   createPasswordUser,
@@ -32,6 +33,8 @@ import {
 import { normalizeEmail, verifyPassword } from "./password";
 import { checkRateLimit, clearRateLimit, recordFailedAttempt } from "./rateLimiter";
 import { sdk } from "./_core/sdk";
+import { createHash, randomInt, randomBytes } from "node:crypto";
+import { consumePasswordReset, savePasswordReset } from "./db";
 
 const currency = z.enum(["USD", "EUR", "GBP"]);
 const employmentStatus = z.enum(["Active", "On leave", "Inactive"]);
@@ -82,6 +85,25 @@ const timeEntryInput = z.object({
   billingClassification,
   billingRate: z.coerce.number().nonnegative().nullable().optional(),
   currency: currency.nullable().optional(),
+});
+
+const retainerType = z.enum(["HOURS", "AMOUNT"]);
+const retainerStatus = z.enum(["DRAFT", "ACTIVE", "EXPIRED", "TERMINATED"]);
+const billingFrequency = z.enum(["MONTHLY", "QUARTERLY", "ANNUALLY"]);
+
+const retainerInput = z.object({
+  clientId: z.string().min(1),
+  projectId: z.string().min(1).nullable().optional(),
+  name: z.string().trim().min(1).max(200),
+  type: retainerType,
+  contractedHours: z.coerce.number().positive().max(10000).nullable().optional(),
+  contractedAmount: z.coerce.number().positive().max(100000000).nullable().optional(),
+  currency,
+  billingFrequency,
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  rolloverAllowed: z.boolean(),
+  alertThresholdPercent: z.coerce.number().min(0).max(100),
 });
 
 export const appRouter = router({
@@ -288,6 +310,77 @@ export const appRouter = router({
           organizationId: user.organizationId?.toHexString() ?? null,
           consultantId: user.consultantId?.toHexString() ?? null,
         };
+      }),
+    requestPasswordReset: publicProcedure
+      .input(z.object({ email: z.string().trim().email("Invalid email address") }))
+      .mutation(async ({ ctx, input }) => {
+        const normalizedEmail = normalizeEmail(input.email);
+        const ip = ctx.req.ip || ctx.req.socket?.remoteAddress || "127.0.0.1";
+        const rateLimitKey = `password-reset:${ip}:${normalizedEmail}`;
+        checkRateLimit(rateLimitKey);
+        recordFailedAttempt(rateLimitKey);
+
+        const consoleOtp = process.env.PASSWORD_RESET_CONSOLE_OTP === "true" && process.env.NODE_ENV !== "production";
+        const user = await getAuthUserByEmail(normalizedEmail);
+        if (user?.passwordHash && user.email) {
+          const token = consoleOtp ? String(randomInt(100000, 1000000)) : randomBytes(32).toString("hex");
+          const tokenHash = createHash("sha256").update(token).digest("hex");
+          await savePasswordReset(user._id.toHexString(), tokenHash, new Date(Date.now() + (consoleOtp ? 15 : 60) * 60 * 1000));
+          if (consoleOtp) {
+            const maskedEmail = normalizedEmail.replace(/^(.).+(@.*)$/, "$1***$2");
+            console.info(`[Password Reset] OTP for ${maskedEmail}: ${token} (expires in 15 minutes)`);
+            return { success: true, delivery: "console" } as const;
+          }
+          const apiKey = process.env.RESEND_API_KEY;
+          const from = process.env.AUTH_EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "NEXCORE <onboarding@resend.dev>";
+          const appUrl = (process.env.APP_URL || process.env.FRONTEND_URL || "").replace(/\/$/, "");
+          if (!apiKey || !from || !appUrl) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Password reset email is not configured." });
+          const resetUrl = `${appUrl}/?resetToken=${encodeURIComponent(token)}`;
+          const response = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(10000),
+            body: JSON.stringify({
+              from,
+              to: [user.email],
+              subject: "Reset your NEXCORE password",
+              html: `<p>We received a request to reset your NEXCORE password.</p><p><a href="${resetUrl}">Choose a new password</a></p><p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>`,
+            }),
+          });
+          if (!response.ok) {
+            const providerError = await response.json().catch(() => null) as { name?: string; message?: string } | null;
+            console.error("Password reset email delivery failed", {
+              status: response.status,
+              code: providerError?.name ?? "unknown",
+              detail: providerError?.message?.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]").slice(0, 300),
+            });
+            if (response.status === 403) {
+              throw new TRPCError({
+                code: "FORBIDDEN",
+                message: "Resend rejected this email. Verify the sender domain and API key permissions. The Resend test sender can only deliver to allowed test recipients; configure AUTH_EMAIL_FROM with an address on your verified domain for regular delivery.",
+              });
+            }
+            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not send the password reset email. Please try again later." });
+          }
+        }
+        return { success: true, delivery: consoleOtp ? "console" : "email" } as const;
+      }),
+    resetPassword: publicProcedure
+      .input(z.object({
+        token: z.string().min(1).optional(),
+        code: z.string().regex(/^\d{6}$/).optional(),
+        password: z.string().min(8).max(128),
+      }).refine(input => Boolean(input.token) !== Boolean(input.code), "Provide either a reset token or a six-digit code."))
+      .mutation(async ({ ctx, input }) => {
+        const ip = ctx.req.ip || ctx.req.socket?.remoteAddress || "127.0.0.1";
+        const rateLimitKey = `reset-password:${ip}`;
+        checkRateLimit(rateLimitKey);
+        const tokenHash = createHash("sha256").update(input.code ?? input.token!).digest("hex");
+        if (!(await consumePasswordReset(tokenHash, input.password))) {
+          recordFailedAttempt(rateLimitKey);
+          throw new TRPCError({ code: "BAD_REQUEST", message: "This reset code or link is invalid or expired. Please request a new one." });
+        }
+        return { success: true } as const;
       }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -573,6 +666,16 @@ export const appRouter = router({
     returnToDraft: permissionProcedure("time.approve").input(z.object({ id: z.string().min(1) })).mutation(({ ctx, input }) => erp.transitionTimeEntry(input.id, "Draft", ctx.user)),
     approvalHistory: permissionProcedure("time.read").input(z.object({ id: z.string().min(1) })).query(({ ctx, input }) => erp.listApprovalHistory(input.id, ctx.user)),
     metrics: permissionProcedure("metrics.utilization").input(z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), consultantId: z.string().optional(), clientId: z.string().optional(), projectId: z.string().optional() }).default({})).query(({ ctx, input }) => erp.timeEntryMetrics(input, ctx.user)),
+  }),
+  retainers: router({
+    list: permissionProcedure("clients.read").query(({ ctx }) => retainerDb.listRetainers(ctx.user)),
+    get: permissionProcedure("clients.read").input(z.object({ id: z.string().min(1) })).query(({ ctx, input }) => retainerDb.getRetainer(input.id, ctx.user)),
+    create: permissionProcedure("clients.manage").input(retainerInput).mutation(({ ctx, input }) => retainerDb.createRetainer(input, ctx.user)),
+    update: permissionProcedure("clients.manage").input(z.object({ id: z.string().min(1), data: retainerInput })).mutation(({ ctx, input }) => retainerDb.updateRetainer(input.id, input.data, ctx.user)),
+    activate: permissionProcedure("clients.manage").input(z.object({ id: z.string().min(1) })).mutation(({ ctx, input }) => retainerDb.activateRetainer(input.id, ctx.user)),
+    terminate: permissionProcedure("clients.manage").input(z.object({ id: z.string().min(1) })).mutation(({ ctx, input }) => retainerDb.terminateRetainer(input.id, ctx.user)),
+    usage: permissionProcedure("clients.read").input(z.object({ id: z.string().min(1) })).query(({ ctx, input }) => retainerDb.getRetainerUsage(input.id, ctx.user)),
+    alerts: permissionProcedure("clients.read").query(({ ctx }) => retainerDb.getRetainerAlerts(ctx.user)),
   }),
 });
 
