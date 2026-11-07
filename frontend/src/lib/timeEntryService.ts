@@ -51,7 +51,7 @@ function recordSignature(entry: TimeEntry) {
   return entrySignature({ ...entry, hours: String(entry.hours) });
 }
 
-export function validateTimeEntryForm(values: TimeEntryFormValues, consultants: Consultant[], clients: Client[], projects: Project[], existing: TimeEntry[], editingId?: string, maxHours = MAX_HOURS_PER_ENTRY): TimeEntryValidationErrors {
+export function validateTimeEntryForm(values: TimeEntryFormValues, consultants: Consultant[], clients: Client[], projects: Project[], existing: TimeEntry[], editingId?: string, maxHours = MAX_HOURS_PER_ENTRY, requireBillingRate = true): TimeEntryValidationErrors {
   const errors: TimeEntryValidationErrors = {};
   const consultant = consultants.find((record) => record.id === values.consultantId);
   const client = clients.find((record) => record.id === values.clientId);
@@ -67,7 +67,7 @@ export function validateTimeEntryForm(values: TimeEntryFormValues, consultants: 
   if (!Number.isFinite(hours) || hours <= 0) errors.hours = "Hours must be greater than zero.";
   else if (hours > maxHours) errors.hours = `Hours cannot exceed the configured ${maxHours}-hour entry maximum.`;
   if (values.billingClassification === "Billable") {
-    if (!Number.isFinite(rate) || rate < 0 || values.billingRate.trim() === "") errors.billingRate = "Enter a non-negative billing rate for billable work.";
+    if (requireBillingRate && (!Number.isFinite(rate) || rate < 0 || values.billingRate.trim() === "")) errors.billingRate = "Enter a non-negative billing rate for billable work.";
     if (!project || values.currency !== project.billingCurrency) errors.currency = "Currency must match the project's billing currency.";
   }
   if (values.billingClassification === "Non-billable" && values.billingRate.trim() && (!Number.isFinite(rate) || rate < 0)) errors.billingRate = "Billing rate must be empty or non-negative.";
