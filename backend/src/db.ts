@@ -6,6 +6,7 @@ import {
   type MongoOrganization,
   type MongoJoinRequest,
   type MongoNotification,
+  type MongoPasswordReset,
 } from "./mongo";
 import type {
   InsertUser,
@@ -212,6 +213,30 @@ export async function createPasswordUser(params: {
 
   await collection<MongoUser>(db, "users").insertOne(newUser);
   return toUser(newUser);
+}
+
+export async function savePasswordReset(userId: string, tokenHash: string, expiresAt: Date): Promise<void> {
+  const db = await getMongoDb();
+  if (!db) throw new Error("MongoDB is not available");
+  const resets = collection<MongoPasswordReset>(db, "password_resets");
+  const id = objectId(userId);
+  await resets.deleteMany({ userId: id });
+  await resets.insertOne({ _id: new ObjectId(), userId: id, tokenHash, expiresAt, createdAt: new Date() });
+}
+
+export async function consumePasswordReset(tokenHash: string, password: string): Promise<boolean> {
+  const db = await getMongoDb();
+  if (!db) throw new Error("MongoDB is not available");
+  const resets = collection<MongoPasswordReset>(db, "password_resets");
+  const reset = await resets.findOneAndDelete({ tokenHash, expiresAt: { $gt: new Date() } });
+  if (!reset) return false;
+  const { hash, salt } = hashPassword(password);
+  await collection<MongoUser>(db, "users").updateOne(
+    { _id: reset.userId },
+    { $set: { passwordHash: hash, passwordSalt: salt, updatedAt: new Date() } },
+  );
+  await resets.deleteMany({ userId: reset.userId });
+  return true;
 }
 
 export async function listUsers(organizationId?: string): Promise<User[]> {

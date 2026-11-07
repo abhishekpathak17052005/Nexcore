@@ -19,7 +19,7 @@ describe("Phase 10: Production Hardening, Security, and Final Acceptance", () =>
       expect(health.connected).toBe(true);
       expect(typeof health.latencyMs).toBe("number");
       expect(health.latencyMs).toBeGreaterThanOrEqual(0);
-      expect(health.database).toBe("consultant_utilization_dashboard");
+      expect(health.database).toBe(process.env.MONGODB_DB_NAME || "consultant_utilization_dashboard");
       expect(["standalone", "replicaSet"]).toContain(health.topology);
       expect(typeof health.transactionsSupported).toBe("boolean");
     });
@@ -182,7 +182,8 @@ describe("Phase 10: Production Hardening, Security, and Final Acceptance", () =>
           billingClassification: "Billable",
         }, consultantUser);
         expect(entry.status).toBe("Draft");
-        expect(entry.billingRateSnapshot).toBe(275);
+        expect(entry.billingRateSnapshot).toBeNull();
+        expect((await erp.getTimeEntry(entry.id, adminUser)).billingRateSnapshot).toBe(275);
 
         // 3. Consultant submits timesheet
         const submitted = await erp.transitionTimeEntry(entry.id, "Submitted", consultantUser);

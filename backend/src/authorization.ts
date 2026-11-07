@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import type { User } from "./types";
+import { objectId } from "./mongo";
 
 export type Role = "admin" | "manager" | "finance" | "consultant" | "user";
 export type Permission =
@@ -78,6 +79,10 @@ export function assertOrganizationScope(user: User, resourceOrgId: string | null
   if (resourceOrgId && user.organizationId && user.organizationId !== resourceOrgId) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Cross-organization data access is strictly prohibited." });
   }
+}
+
+export function orgFilter(user: User) {
+  return { organizationId: user.organizationId ? objectId(user.organizationId) : null };
 }
 
 export function assertRecordScope(user: User, consultantId: string | undefined) {

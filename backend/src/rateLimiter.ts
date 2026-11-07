@@ -23,7 +23,7 @@ export function checkRateLimit(key: string): void {
     const remainingSeconds = Math.ceil((entry.resetAt - now) / 1000);
     throw new TRPCError({
       code: "TOO_MANY_REQUESTS",
-      message: `Too many login attempts. Please try again in ${remainingSeconds} seconds.`,
+      message: `Too many requests. Please try again in ${remainingSeconds} seconds.`,
     });
   }
 }

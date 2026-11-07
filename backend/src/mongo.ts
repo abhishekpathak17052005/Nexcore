@@ -60,6 +60,14 @@ export interface MongoUser {
   lastSignedIn: Date;
 }
 
+export interface MongoPasswordReset {
+  _id: ObjectId;
+  userId: ObjectId;
+  tokenHash: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
 export interface MongoJoinRequest {
   _id: ObjectId;
   organizationId: ObjectId;
@@ -94,17 +102,64 @@ export interface ProjectDocument { _id: ObjectId; organizationId?: ObjectId | nu
 export interface TimeEntryDocument { _id: ObjectId; organizationId?: ObjectId | null; consultantId: ObjectId; clientId: ObjectId; projectId: ObjectId; workDate: string; description: string; hours: number; billingClassification: BillingClassification; status: TimeEntryStatus; billingRateSnapshot: number | null; currency: CurrencyCode | null; createdBy: ObjectId; createdAt: Date; updatedAt: Date; submittedAt: Date | null; reviewedAt: Date | null; reviewedBy: ObjectId | null; rejectionReason: string | null; }
 export interface ApprovalHistoryDocument { _id: ObjectId; organizationId?: ObjectId | null; timeEntryId: ObjectId; previousStatus: TimeEntryStatus | null; newStatus: TimeEntryStatus; actedBy: ObjectId; rejectionReason: string | null; createdAt: Date; }
 
+export type RetainerType = "HOURS" | "AMOUNT";
+export type RetainerStatus = "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
+export type BillingFrequency = "MONTHLY" | "QUARTERLY" | "ANNUALLY";
+
+export interface RetainerDocument {
+  _id: ObjectId;
+  organizationId?: ObjectId | null;
+  clientId: ObjectId;
+  projectId?: ObjectId | null;
+  name: string;
+  type: RetainerType;
+  contractedHours: number | null;
+  contractedAmount: number | null;
+  currency: CurrencyCode;
+  billingFrequency: BillingFrequency;
+  startDate: string;
+  endDate: string;
+  rolloverAllowed: boolean;
+  alertThresholdPercent: number;
+  status: RetainerStatus;
+  createdBy: ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 let client: MongoClient | null = null;
 let database: Db | null = null;
+let connectionPromise: Promise<Db> | null = null;
 let indexesReady: Promise<void> | null = null;
 
 export async function getMongoDb(): Promise<Db | null> {
   const uri = process.env.MONGODB_URI;
   if (!uri) return null;
-  if (!client) {
-    client = new MongoClient(uri, { maxPoolSize: 10, serverSelectionTimeoutMS: 5000 });
-    await client.connect();
-    database = client.db(process.env.MONGODB_DB_NAME || "consultant_utilization_dashboard");
+  if (!database) {
+    if (!connectionPromise) {
+      connectionPromise = (async () => {
+        const connectingClient = new MongoClient(uri, { maxPoolSize: 10, serverSelectionTimeoutMS: 5000 });
+        client = connectingClient;
+        try {
+          await connectingClient.connect();
+          const connectedDatabase = connectingClient.db(process.env.MONGODB_DB_NAME || "consultant_utilization_dashboard");
+          database = connectedDatabase;
+          return connectedDatabase;
+        } catch (error) {
+          // Do not leave a half-initialized client cached: subsequent requests
+          // must be able to retry instead of failing with a null handle.
+          if (client === connectingClient) {
+            client = null;
+            database = null;
+          }
+          await connectingClient.close().catch(() => undefined);
+          throw error;
+        } finally {
+          connectionPromise = null;
+        }
+      })();
+    }
+    await connectionPromise;
   }
   if (!database) throw new Error("MongoDB database handle was not initialized.");
   if (!indexesReady) indexesReady = ensureIndexes(database);
@@ -145,6 +200,7 @@ async function ensureIndexes(db: Db) {
     db.collection<ProjectDocument>("projects").createIndexes([{ key: { clientId: 1, name: 1 }, unique: true }, { key: { clientId: 1 } }, { key: { organizationId: 1 } }]),
     db.collection<TimeEntryDocument>("timeEntries").createIndexes([{ key: { consultantId: 1, workDate: 1 } }, { key: { status: 1 } }, { key: { projectId: 1, workDate: 1 } }, { key: { consultantId: 1, clientId: 1, projectId: 1, workDate: 1 } }, { key: { organizationId: 1 } }]),
     db.collection<ApprovalHistoryDocument>("timeEntryApprovalHistory").createIndexes([{ key: { timeEntryId: 1, createdAt: -1 } }, { key: { actedBy: 1 } }, { key: { organizationId: 1 } }]),
+    db.collection<RetainerDocument>("retainers").createIndexes([{ key: { clientId: 1 } }, { key: { status: 1 } }, { key: { endDate: 1 } }, { key: { organizationId: 1 } }, { key: { clientId: 1, projectId: 1 } }]),
   ]);
 }
 

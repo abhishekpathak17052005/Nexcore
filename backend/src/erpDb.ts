@@ -3,6 +3,7 @@ import { ObjectId, type Filter } from "mongodb";
 import { collection, getMongoClient, requireMongoDb, objectId, type ApprovalHistoryDocument, type ClientDocument, type ConsultantDocument, type ProjectDocument, type TimeEntryDocument } from "./mongo";
 import { assertNotSelfApproval, assertRecordScope, assertOrganizationScope, hasPermission } from "./authorization";
 import type { User } from "./types";
+import { redactFinancialValues } from "./financialAccess";
 
 export type { BillingClassification, CurrencyCode, EmploymentStatus, TimeEntryStatus } from "./mongo";
 import type { BillingClassification, CurrencyCode, EmploymentStatus, TimeEntryStatus } from "./mongo";
@@ -14,7 +15,27 @@ function validDate(value: string) { return /^\d{4}-\d{2}-\d{2}$/.test(value) && 
 function trim(value: string) { return value.trim(); }
 function id(value: ObjectId) { return value.toHexString(); }
 function date(value: Date | null | undefined) { return value?.toISOString() ?? null; }
-function toConsultant(row: ConsultantDocument) { const capacity = Number(row.weeklyCapacityHours); return { id: id(row._id), employeeCode: row.employeeCode, firstName: row.firstName, lastName: row.lastName, email: row.email, name: `${row.firstName} ${row.lastName}`, initials: `${row.firstName[0] ?? "?"}${row.lastName[0] ?? "?"}`.toUpperCase(), role: row.role, department: row.department, employmentStatus: row.employmentStatus, weeklyCapacityHours: capacity, billingRate: Number(row.billingRate), currency: row.currency, startDate: row.startDate, assignedProjects: [], createdAt: date(row.createdAt) ?? "", updatedAt: date(row.updatedAt) ?? "", availableHours: capacity * 4, billableHours: 0, nonBillableHours: 0, utilization: 0, revenue: 0, status: "Watch" as const, color: "#0F9D91" }; }
+export function serializeConsultantResponse(row: ConsultantDocument, actor: User) {
+  return redactFinancialValues({
+    id: id(row._id),
+    employeeCode: row.employeeCode,
+    firstName: row.firstName,
+    lastName: row.lastName,
+    email: row.email,
+    name: `${row.firstName} ${row.lastName}`,
+    initials: `${row.firstName[0] ?? "?"}${row.lastName[0] ?? "?"}`.toUpperCase(),
+    role: row.role,
+    department: row.department,
+    employmentStatus: row.employmentStatus,
+    weeklyCapacityHours: Number(row.weeklyCapacityHours),
+    billingRate: Number(row.billingRate),
+    currency: row.currency,
+    startDate: row.startDate,
+    createdAt: date(row.createdAt) ?? "",
+    updatedAt: date(row.updatedAt) ?? "",
+    color: "#0F9D91",
+  }, actor, ["billingRate"] as const);
+}
 function toClient(row: ClientDocument) { return { id: id(row._id), clientCode: row.clientCode, name: row.name, status: row.status, defaultCurrency: row.defaultCurrency, createdAt: date(row.createdAt) ?? "", updatedAt: date(row.updatedAt) ?? "" }; }
 function toProject(row: ProjectDocument) { return { id: id(row._id), clientId: id(row.clientId), name: row.name, status: row.status, billingCurrency: row.billingCurrency, startDate: row.startDate, endDate: row.endDate, createdAt: date(row.createdAt) ?? "", updatedAt: date(row.updatedAt) ?? "" }; }
 function assertEntryScope(actor: User, row: TimeEntryDocument) {
@@ -39,7 +60,7 @@ function assertReferenceScope(actor: User) {
   if (actor.role === "consultant") throw new TRPCError({ code: "FORBIDDEN", message: "Your account is not assigned to a project scope." });
 }
 
-function toTimeEntry(row: TimeEntryDocument) { return { id: id(row._id), consultantId: id(row.consultantId), clientId: id(row.clientId), projectId: id(row.projectId), workDate: row.workDate, description: row.description, hours: Number(row.hours), billingClassification: row.billingClassification, status: row.status, billingRateSnapshot: row.billingRateSnapshot == null ? null : Number(row.billingRateSnapshot), currency: row.currency, createdAt: date(row.createdAt) ?? "", updatedAt: date(row.updatedAt) ?? "", submittedAt: date(row.submittedAt), reviewedAt: date(row.reviewedAt), reviewedBy: row.reviewedBy ? id(row.reviewedBy) : null, rejectionReason: row.rejectionReason }; }
+function toTimeEntry(row: TimeEntryDocument, actor: User) { return redactFinancialValues({ id: id(row._id), consultantId: id(row.consultantId), clientId: id(row.clientId), projectId: id(row.projectId), workDate: row.workDate, description: row.description, hours: Number(row.hours), billingClassification: row.billingClassification, status: row.status, billingRateSnapshot: row.billingRateSnapshot == null ? null : Number(row.billingRateSnapshot), currency: row.currency, createdAt: date(row.createdAt) ?? "", updatedAt: date(row.updatedAt) ?? "", submittedAt: date(row.submittedAt), reviewedAt: date(row.reviewedAt), reviewedBy: row.reviewedBy ? id(row.reviewedBy) : null, rejectionReason: row.rejectionReason }, actor, ["billingRateSnapshot"] as const); }
 
 export interface ConsultantInput { employeeCode: string; firstName: string; lastName: string; email: string; role: string; department: string; employmentStatus: EmploymentStatus; weeklyCapacityHours: number; billingRate: number; currency: CurrencyCode; startDate: string; }
 export interface ClientInput { clientCode: string; name: string; status: "Active" | "Inactive"; defaultCurrency: CurrencyCode; }
@@ -50,8 +71,8 @@ function validateConsultant(input: ConsultantInput) { if (!trim(input.employeeCo
 function validateEntry(input: TimeEntryInput) { if (!validDate(input.workDate)) throw new TRPCError({ code: "BAD_REQUEST", message: "Work date must be valid." }); if (!trim(input.description)) throw new TRPCError({ code: "BAD_REQUEST", message: "Description is required." }); if (!Number.isFinite(input.hours) || input.hours <= 0 || input.hours > 24) throw new TRPCError({ code: "BAD_REQUEST", message: "Hours must be greater than zero and no more than 24 per entry." }); if (input.billingRate != null && (!Number.isFinite(input.billingRate) || input.billingRate < 0)) throw new TRPCError({ code: "BAD_REQUEST", message: "Billing rate must be non-negative." }); }
 function mongoError(error: unknown, fallback: string): never { if (error instanceof TRPCError) throw error; const message = String(error); if (message.includes("E11000")) throw new TRPCError({ code: "CONFLICT", message: "The record conflicts with an existing unique business record." }); throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: fallback }); }
 
-export async function listConsultants(actor: User) { const db = await requireMongoDb(); return (await collection<ConsultantDocument>(db, "consultants").find({ ...consultantScope(actor), ...orgFilter(actor) }).sort({ lastName: 1, firstName: 1 }).toArray()).map(toConsultant); }
-export async function getConsultant(value: string, actor: User) { const db = await requireMongoDb(); const row = await collection<ConsultantDocument>(db, "consultants").findOne({ _id: recordId(value) }); if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Consultant not found." }); assertRecordScope(actor, value); assertOrganizationScope(actor, row.organizationId ? id(row.organizationId) : null); return toConsultant(row); }
+export async function listConsultants(actor: User) { const db = await requireMongoDb(); return (await collection<ConsultantDocument>(db, "consultants").find({ ...consultantScope(actor), ...orgFilter(actor) }).sort({ lastName: 1, firstName: 1 }).toArray()).map((row) => serializeConsultantResponse(row, actor)); }
+export async function getConsultant(value: string, actor: User) { const db = await requireMongoDb(); const row = await collection<ConsultantDocument>(db, "consultants").findOne({ _id: recordId(value) }); if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Consultant not found." }); assertRecordScope(actor, value); assertOrganizationScope(actor, row.organizationId ? id(row.organizationId) : null); return serializeConsultantResponse(row, actor); }
 export async function createConsultant(input: ConsultantInput, actor?: User) { validateConsultant(input); const db = await requireMongoDb(); const now = new Date(); const orgId = actor?.organizationId ? recordId(actor.organizationId) : null; try { const result = await collection<ConsultantDocument>(db, "consultants").insertOne({ _id: new ObjectId(), organizationId: orgId, ...input, employeeCode: trim(input.employeeCode), firstName: trim(input.firstName), lastName: trim(input.lastName), email: trim(input.email), role: trim(input.role), department: trim(input.department), createdAt: now, updatedAt: now }); return getConsultant(id(result.insertedId), actor ?? ({ role: "admin", consultantId: null } as User)); } catch (error) { return mongoError(error, "Consultant could not be created."); } }
 export async function updateConsultant(value: string, input: ConsultantInput, actor?: User) { validateConsultant(input); const db = await requireMongoDb(); const key = recordId(value); const current = await collection<ConsultantDocument>(db, "consultants").findOne({ _id: key }); if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Consultant not found." }); if (actor) assertOrganizationScope(actor, current.organizationId ? id(current.organizationId) : null); try { const result = await collection<ConsultantDocument>(db, "consultants").updateOne({ _id: key }, { $set: { ...input, employeeCode: trim(input.employeeCode), firstName: trim(input.firstName), lastName: trim(input.lastName), email: trim(input.email), role: trim(input.role), department: trim(input.department), updatedAt: new Date() } }); if (!result.matchedCount) throw new TRPCError({ code: "NOT_FOUND", message: "Consultant not found." }); return getConsultant(value, actor ?? ({ role: "admin", consultantId: null } as User)); } catch (error) { return mongoError(error, "Consultant could not be updated."); } }
 export async function deactivateConsultant(value: string, actor?: User) { const db = await requireMongoDb(); const key = recordId(value); const current = await collection<ConsultantDocument>(db, "consultants").findOne({ _id: key }); if (!current) throw new TRPCError({ code: "NOT_FOUND", message: "Consultant not found." }); if (actor) assertOrganizationScope(actor, current.organizationId ? id(current.organizationId) : null); const result = await collection<ConsultantDocument>(db, "consultants").updateOne({ _id: key }, { $set: { employmentStatus: "Inactive", updatedAt: new Date() } }); if (!result.matchedCount) throw new TRPCError({ code: "NOT_FOUND", message: "Consultant not found." }); return getConsultant(value, actor ?? ({ role: "admin", consultantId: null } as User)); }
@@ -71,8 +92,52 @@ export async function updateProject(value: string, input: ProjectInput, actor?: 
 async function resolveContext(db: Awaited<ReturnType<typeof requireMongoDb>>, input: TimeEntryInput) { const consultantId = recordId(input.consultantId); const clientId = recordId(input.clientId); const projectId = recordId(input.projectId); const [consultant, client, project] = await Promise.all([collection<ConsultantDocument>(db, "consultants").findOne({ _id: consultantId }), collection<ClientDocument>(db, "clients").findOne({ _id: clientId }), collection<ProjectDocument>(db, "projects").findOne({ _id: projectId })]); if (!consultant || !client || !project) throw new TRPCError({ code: "BAD_REQUEST", message: "Consultant, client, and project relationships must be valid." }); if (!project.clientId.equals(clientId)) throw new TRPCError({ code: "BAD_REQUEST", message: "Project must belong to the selected client." }); return { consultantId, clientId, projectId, consultant, client, project }; }
 function duplicateFilter(input: TimeEntryInput, exclude?: ObjectId): Filter<TimeEntryDocument> { return { ...(exclude ? { _id: { $ne: exclude } } : {}), consultantId: recordId(input.consultantId), clientId: recordId(input.clientId), projectId: recordId(input.projectId), workDate: input.workDate, description: trim(input.description), hours: input.hours, billingClassification: input.billingClassification }; }
 
-export async function listTimeEntries(input: { consultantId?: string; clientId?: string; projectId?: string; billingClassification?: BillingClassification; status?: TimeEntryStatus; from?: string; to?: string; query?: string; page: number; pageSize: number }, actor: User) { const db = await requireMongoDb(); const filter: Filter<TimeEntryDocument> = { ...orgFilter(actor) }; if (input.consultantId) { assertRecordScope(actor, input.consultantId); filter.consultantId = recordId(input.consultantId); } else if (actor.role === "consultant") { if (!actor.consultantId) throw new TRPCError({ code: "FORBIDDEN", message: "Your account is not assigned to a consultant record." }); filter.consultantId = recordId(actor.consultantId); } if (input.clientId) filter.clientId = recordId(input.clientId); if (input.projectId) filter.projectId = recordId(input.projectId); if (input.billingClassification) filter.billingClassification = input.billingClassification; if (input.status) filter.status = input.status; if (input.from || input.to) filter.workDate = { ...(input.from ? { $gte: input.from } : {}), ...(input.to ? { $lte: input.to } : {}) }; if (input.query?.trim()) filter.description = { $regex: input.query.trim(), $options: "i" }; const entries = collection<TimeEntryDocument>(db, "timeEntries"); const [rows, total] = await Promise.all([entries.find(filter).sort({ workDate: -1, _id: -1 }).skip((input.page - 1) * input.pageSize).limit(input.pageSize).toArray(), entries.countDocuments(filter)]); return { items: rows.map(toTimeEntry), total, page: input.page, pageSize: input.pageSize }; }
-export async function getTimeEntry(value: string, actor: User) { const db = await requireMongoDb(); const row = await collection<TimeEntryDocument>(db, "timeEntries").findOne({ _id: recordId(value) }); if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Time entry not found." }); assertEntryScope(actor, row); return toTimeEntry(row); }
+export async function listTimeEntries(input: { consultantId?: string; clientId?: string; projectId?: string; billingClassification?: BillingClassification; status?: TimeEntryStatus; from?: string; to?: string; query?: string; page: number; pageSize: number }, actor: User) {
+  const db = await requireMongoDb();
+  const filter: Filter<TimeEntryDocument> = { ...orgFilter(actor) };
+  if (input.consultantId) { assertRecordScope(actor, input.consultantId); filter.consultantId = recordId(input.consultantId); }
+  else if (actor.role === "consultant") { if (!actor.consultantId) throw new TRPCError({ code: "FORBIDDEN", message: "Your account is not assigned to a consultant record." }); filter.consultantId = recordId(actor.consultantId); }
+  if (input.clientId) filter.clientId = recordId(input.clientId);
+  if (input.projectId) filter.projectId = recordId(input.projectId);
+  if (input.billingClassification) filter.billingClassification = input.billingClassification;
+  if (input.status) filter.status = input.status;
+  if (input.from || input.to) filter.workDate = { ...(input.from ? { $gte: input.from } : {}), ...(input.to ? { $lte: input.to } : {}) };
+  if (input.query?.trim()) filter.description = { $regex: input.query.trim(), $options: "i" };
+
+  const entries = collection<TimeEntryDocument>(db, "timeEntries");
+  const [rows, total] = await Promise.all([entries.find(filter).sort({ workDate: -1, _id: -1 }).skip((input.page - 1) * input.pageSize).limit(input.pageSize).toArray(), entries.countDocuments(filter)]);
+  const items = rows.map((row) => toTimeEntry(row, actor));
+
+  // Consultants may select only client/project pairs already present in their own
+  // time-entry history. Directory procedures remain forbidden to this role.
+  if (actor.role === "consultant" && actor.organizationId && rows.length > 0) {
+    const clientIds = [...new Map(rows.map((row) => [id(row.clientId), row.clientId])).values()];
+    const projectIds = [...new Map(rows.map((row) => [id(row.projectId), row.projectId])).values()];
+    const [clients, projects] = await Promise.all([
+      collection<ClientDocument>(db, "clients").find({ ...orgFilter(actor), _id: { $in: clientIds } }).toArray(),
+      collection<ProjectDocument>(db, "projects").find({ ...orgFilter(actor), _id: { $in: projectIds } }).toArray(),
+    ]);
+    const clientById = new Map(clients.map((client) => [id(client._id), client]));
+    const projectById = new Map(projects.map((project) => [id(project._id), project]));
+    return {
+      items: items.map((entry) => {
+        const client = clientById.get(entry.clientId);
+        const project = projectById.get(entry.projectId);
+        return {
+          ...entry,
+          clientReference: client ? { id: id(client._id), name: client.name, status: client.status, defaultCurrency: client.defaultCurrency } : null,
+          projectReference: project ? { id: id(project._id), clientId: id(project.clientId), name: project.name, status: project.status, billingCurrency: project.billingCurrency } : null,
+        };
+      }),
+      total,
+      page: input.page,
+      pageSize: input.pageSize,
+    };
+  }
+
+  return { items, total, page: input.page, pageSize: input.pageSize };
+}
+export async function getTimeEntry(value: string, actor: User) { const db = await requireMongoDb(); const row = await collection<TimeEntryDocument>(db, "timeEntries").findOne({ _id: recordId(value) }); if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Time entry not found." }); assertEntryScope(actor, row); return toTimeEntry(row, actor); }
 
 export async function createTimeEntry(input: TimeEntryInput, actor: User) {
   validateEntry(input);
@@ -234,7 +299,7 @@ export async function transitionTimeEntry(value: string, nextStatus: TimeEntrySt
           { session }
         );
         const updated = await entries.findOne({ _id: key }, { session });
-        output = updated ? toTimeEntry(updated) : null;
+        output = updated ? toTimeEntry(updated, actor) : null;
       });
       if (!output) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Approval transition did not return the updated record." });
       return output;
@@ -316,7 +381,7 @@ export async function transitionTimeEntry(value: string, nextStatus: TimeEntrySt
 
     const updated = await entries.findOne({ _id: key });
     if (!updated) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Approval transition did not return the updated record." });
-    return toTimeEntry(updated);
+    return toTimeEntry(updated, actor);
   }
 }
 

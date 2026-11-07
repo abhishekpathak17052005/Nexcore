@@ -68,7 +68,15 @@ describe("Standalone Password & Rate Limiter Security", () => {
       recordFailedAttempt(key);
     }
     // 6th attempt should be blocked
-    expect(() => checkRateLimit(key)).toThrow("Too many login attempts");
+    let rateLimitError: unknown;
+    try {
+      checkRateLimit(key);
+    } catch (error) {
+      rateLimitError = error;
+    }
+    expect(rateLimitError).toMatchObject({ code: "TOO_MANY_REQUESTS" });
+    expect(rateLimitError).toBeInstanceOf(Error);
+    expect((rateLimitError as Error).message).toMatch(/^Too many requests\. Please try again in \d+ seconds\.$/);
 
     // Clearing rate limit allows retry
     clearRateLimit(key);
@@ -165,8 +173,10 @@ describe("Authentication & Session Security Router", () => {
       }),
     ).rejects.toThrow("You do not have required permission");
 
-    // Consultant cannot access financial metrics
-    await expect(caller.timeEntries.metrics()).rejects.toThrow();
+    // Consultant can read utilization metrics, but receives no financial totals.
+    const metrics = await caller.timeEntries.metrics();
+    expect(metrics.estimatedRevenueByCurrency).toEqual({});
+    expect(metrics.approvedEstimatedRevenueByCurrency).toEqual({});
   });
 
   it("prevents self-role changes by administrator", async () => {

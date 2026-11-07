@@ -386,7 +386,7 @@ describe("Phase 9.2: NEXOR Integrity & Production Readiness Validation", () => {
         billingClassification: "Billable",
       }, consultantActorA);
 
-      expect(entry.billingRateSnapshot).toBe(200);
+      expect(entry.billingRateSnapshot).toBeNull();
 
       // Now Admin updates consultant's rate from 200 to 350
       await erp.updateConsultant(testConsultantA.id, {
@@ -423,7 +423,9 @@ describe("Phase 9.2: NEXOR Integrity & Production Readiness Validation", () => {
       }, consultantActorA);
 
       // Must be bound to consultant's official rate (350 from previous test), NOT 9999!
-      expect(entry.billingRateSnapshot).toBe(350);
+      expect(entry.billingRateSnapshot).toBeNull();
+      const storedEntry = await erp.getTimeEntry(entry.id, adminActor);
+      expect(storedEntry.billingRateSnapshot).toBe(350);
     });
 
     it("segregates estimated revenue by currency without cross-currency aggregation", async () => {

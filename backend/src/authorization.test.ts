@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TRPCError } from "@trpc/server";
 import { appRouter } from "./routers";
-import { assertNotSelfApproval, assertRecordScope, hasPermission, permissionsFor } from "./authorization";
+import { assertNotSelfApproval, assertOrganizationScope, assertRecordScope, hasPermission, permissionsFor } from "./authorization";
 import type { User } from "./types";
 
 const baseUser = (role: User["role"], overrides: Partial<User> = {}): User => ({
@@ -33,6 +33,19 @@ describe("authorization policy", () => {
     expect(hasPermission("admin", "users.manage")).toBe(true);
     expect(hasPermission("manager", "metrics.financial")).toBe(false);
     expect(hasPermission("finance", "time.approve")).toBe(false);
+    expect(hasPermission("admin", "metrics.financial")).toBe(true);
+    expect(hasPermission("finance", "metrics.financial")).toBe(true);
+    expect(hasPermission("manager", "metrics.financial")).toBe(false);
+    expect(hasPermission("consultant", "metrics.financial")).toBe(false);
+    expect(hasPermission("consultant", "clients.read")).toBe(false);
+    expect(hasPermission("manager", "clients.read")).toBe(true);
+  });
+
+  it("enforces organization scope and retainer alert permissions", async () => {
+    const manager = baseUser("manager", { organizationId: "org-a" });
+    expect(() => assertOrganizationScope(manager, "org-a")).not.toThrow();
+    expect(() => assertOrganizationScope(manager, "org-b")).toThrow(TRPCError);
+    await expectForbidden(caller(baseUser("consultant")).retainers.alerts());
   });
 
   it("rejects unauthenticated and unassigned business procedure calls", async () => {
@@ -42,6 +55,12 @@ describe("authorization policy", () => {
     await expectForbidden(caller(baseUser("user")).projects.list());
     await expectForbidden(caller(baseUser("user")).timeEntries.list({ page: 1, pageSize: 50 }));
     await expectForbidden(caller(baseUser("user")).timeEntries.metrics({}));
+  });
+
+  it("keeps Consultant directory lookup denied while allowing own time-entry scope", async () => {
+    const consultant = caller(baseUser("consultant", { consultantId: "507f1f77bcf86cd799439013" }));
+    await expectForbidden(consultant.clients.list());
+    await expectForbidden(consultant.projects.list());
   });
 
   it("restricts finance from consultant mutations and approvals", async () => {
