@@ -210,9 +210,7 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
       <header className="landing-header">
         <div className="landing-header-inner">
           <div className="landing-brand">
-            <span className="brand-badge">
-              <span className="brand-dot" />
-            </span>
+            <img className="brand-logo" src="/nexcore-logo.png" alt="" aria-hidden="true" />
             <div className="brand-titles">
               <span className="brand-name">NEXCORE</span>
               <span className="brand-tagline">Consultant Operations & Analytics</span>

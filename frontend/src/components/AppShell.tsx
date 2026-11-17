@@ -71,7 +71,7 @@ export function AppShell({ children, period, onPeriodChange, alertCount = 0 }: A
       <aside id="primary-navigation" className={`sidebar ${collapsed ? "is-collapsed" : ""} ${mobileOpen ? "is-mobile-open" : ""}`}>
         <div className="sidebar-top">
           <Link href="/" className="wordmark" onClick={closeMobile} aria-label="NEXCORE overview">
-            <span className="wordmark-mark" aria-hidden="true"><i /><i /><i /></span>
+            <img className="wordmark-logo" src="/nexcore-logo.png" alt="" aria-hidden="true" />
             {!collapsed && (
               <span>
                 <strong>NEXCORE</strong>
