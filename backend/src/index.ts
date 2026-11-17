@@ -35,15 +35,18 @@ async function start() {
         process.env.FRONTEND_URL,
       ].filter(Boolean);
 
+  if (isProduction && allowedOrigins.includes("*")) {
+    throw new Error("[Startup] CORS_ALLOWED_ORIGINS must list explicit origins in production; wildcard origins cannot be used with credentialed requests.");
+  }
+
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin) {
-      if (!isProduction || allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+      if (!isProduction || allowedOrigins.includes(origin)) {
         res.setHeader("Access-Control-Allow-Origin", origin);
         res.setHeader("Access-Control-Allow-Credentials", "true");
+        res.vary("Origin");
       }
-    } else {
-      res.setHeader("Access-Control-Allow-Origin", isProduction ? allowedOrigins[0] || "*" : "*");
     }
     res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
