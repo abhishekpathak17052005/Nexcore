@@ -23,6 +23,7 @@ import {
   Compass,
   Search,
   Hash,
+  LogOut,
 } from "lucide-react";
 
 interface LandingPageProps {
@@ -31,7 +32,7 @@ interface LandingPageProps {
 
 export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
   const [, setLocation] = useLocation();
-  const { user, refresh } = useAuth();
+  const { user, refresh, logout } = useAuth();
 
   // Dialog / Modal state
   const [authMode, setAuthMode] = useState<"none" | "login" | "forgotPassword" | "verifyResetCode" | "resetPassword" | "setup" | "registerOrg" | "employeeSignup">("none");
@@ -49,6 +50,11 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
     if (token) {
       setResetToken(token);
       setAuthMode("resetPassword");
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+    if (new URLSearchParams(window.location.search).get("auth") === "login") {
+      setAuthMode("login");
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -75,9 +81,15 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
     { query: debouncedSearch, limit: 5 },
     { enabled: authMode === "employeeSignup" }
   );
+  const signInAttendanceMutation = trpc.attendance.signIn.useMutation();
 
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async () => {
+      try {
+        await signInAttendanceMutation.mutateAsync();
+      } catch {
+        // Login remains successful when an attendance session cannot be started.
+      }
       setErrorMessage(null);
       setAuthMode("none");
       if (refresh) await refresh();
@@ -91,6 +103,9 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
 
   const setupAdminMutation = trpc.auth.setupAdmin.useMutation({
     onSuccess: async () => {
+      try {
+        await signInAttendanceMutation.mutateAsync();
+      } catch {}
       setErrorMessage(null);
       setAuthMode("none");
       if (refresh) await refresh();
@@ -104,6 +119,9 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
 
   const registerOrgMutation = trpc.auth.registerOrganization.useMutation({
     onSuccess: async () => {
+      try {
+        await signInAttendanceMutation.mutateAsync();
+      } catch {}
       setErrorMessage(null);
       setAuthMode("none");
       if (refresh) await refresh();
@@ -117,6 +135,9 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
 
   const employeeSignupMutation = trpc.auth.signup.useMutation({
     onSuccess: async () => {
+      try {
+        await signInAttendanceMutation.mutateAsync();
+      } catch {}
       setErrorMessage(null);
       setAuthMode("none");
       if (refresh) await refresh();
@@ -255,7 +276,7 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
                   className="btn-primary-glow"
                 >
                   <LogIn size={16} />
-                  Sign In
+                  Log In
                 </button>
               </>
             )}
@@ -272,18 +293,18 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
           </div>
 
           <h1 className="hero-headline">
-            Manage Resources. <br />
-            <span className="headline-gradient">Maximize Performance.</span>
+            Every Consultant. <br />
+            <span className="headline-gradient">Every Project. Every Billable Hour.</span>
           </h1>
 
           <p className="hero-subtext" style={{ textAlign: "center", marginLeft: "auto", marginRight: "auto" }}>
-            Track consultant utilization, manage approvals, and monitor estimated revenue—all in one place.
+            Bring your consulting operations into one workspace. Manage your team, track utilization, streamline timesheets, and gain visibility into project delivery.
           </p>
 
           <div className="hero-cta-group">
             {user ? (
               <Link href="/" className="btn-hero-primary">
-                Return to Executive Workspace
+                Open your workspace
                 <ArrowRight size={18} />
               </Link>
             ) : (
@@ -355,11 +376,33 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
               </div>
             </div>
             <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "12px", padding: "14px 16px" }}>
-              <span style={{ fontSize: "11px", color: "#64748B", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Period Logged Hours</span>
+              <span style={{ fontSize: "11px", color: "#64748B", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Period Billable Hours</span>
               <div style={{ display: "flex", alignItems: "baseline", gap: "8px", marginTop: "4px" }}>
                 <strong style={{ fontSize: "22px", fontWeight: 850, color: "#0F172A" }}>480.0h</strong>
                 <span style={{ fontSize: "11px", color: "#64748B" }}>of 510h capacity</span>
               </div>
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => void logout?.()}
+                  style={{ marginTop: "10px", display: "inline-flex", alignItems: "center", gap: "6px", border: "1px solid #E2E8F0", borderRadius: "7px", background: "#FFFFFF", color: "#526678", padding: "6px 9px", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}
+                >
+                  <LogOut size={14} />
+                  Log out
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    setAuthMode("login");
+                  }}
+                  style={{ marginTop: "10px", display: "inline-flex", alignItems: "center", gap: "6px", border: "1px solid #BFDBFE", borderRadius: "7px", background: "#EFF6FF", color: "#1D4ED8", padding: "6px 9px", fontSize: "11px", fontWeight: 700, cursor: "pointer" }}
+                >
+                  <LogIn size={14} />
+                  Log in to view live count
+                </button>
+              )}
             </div>
             <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: "12px", padding: "14px 16px" }}>
               <span style={{ fontSize: "11px", color: "#64748B", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Estimated Revenue</span>
@@ -504,7 +547,7 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
             <div className="feature-icon"><Building2 size={24} /></div>
             <h3>Multi-Tenant Architecture</h3>
             <p>
-              Strict isolation of clients, projects, consultants, and revenue metrics across discrete organizations with zero cross-tenant data leaks.
+              Organization-scoped records keep client, project, consultant, and financial operations within the correct workspace.
             </p>
             <ul className="feature-list">
               <li><CheckCircle2 size={16} /> Safe organization discovery search</li>
@@ -552,7 +595,7 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
                 {authMode === "login" && (
                   <>
                     <Lock size={20} className="text-blue-600" />
-                    <h3>NEXCORE Sign In</h3>
+                    <h3>NEXCORE Log In</h3>
                   </>
                 )}
                 {authMode === "forgotPassword" && <><KeyRound size={20} className="text-blue-600" /><h3>Reset your password</h3></>}
@@ -635,7 +678,7 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
                   ) : (
                     <>
                       <LogIn size={16} />
-                      Sign In
+                      Log In
                     </>
                   )}
                 </button>

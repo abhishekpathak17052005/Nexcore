@@ -122,7 +122,7 @@ export function OnboardingPage() {
   };
 
   return (
-    <div className="landing-container" style={{ minHeight: "100vh", padding: "40px 20px", background: "#F8FAFC" }}>
+    <div className="landing-container onboarding-page" style={{ minHeight: "100vh", padding: "40px 20px" }}>
       {/* Top Header */}
       <header
         style={{
@@ -139,13 +139,13 @@ export function OnboardingPage() {
               width: "38px",
               height: "38px",
               borderRadius: "10px",
-              background: "linear-gradient(135deg, #2563EB, #1D4ED8)",
+              background: "linear-gradient(135deg, #059669, #065F46)",
               display: "grid",
               placeItems: "center",
               color: "#FFFFFF",
               fontWeight: 850,
               fontSize: "16px",
-              boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)",
+              boxShadow: "0 4px 12px rgba(4, 120, 87, 0.2)",
             }}
           >
             N
@@ -199,14 +199,14 @@ export function OnboardingPage() {
                 display: "inline-block",
                 padding: "5px 14px",
                 borderRadius: "9999px",
-                background: "#EFF6FF",
-                color: "#1D4ED8",
+                background: "#ECFDF5",
+                color: "#065F46",
                 fontSize: "12px",
                 fontWeight: 700,
                 textTransform: "uppercase",
                 marginBottom: "12px",
                 letterSpacing: "0.05em",
-                border: "1px solid #BFDBFE",
+                border: "1px solid #B7E4CE",
               }}
             >
               Step 2 of 2: Organization Workspace
@@ -240,7 +240,7 @@ export function OnboardingPage() {
                 borderRadius: "8px",
                 border: "none",
                 background: activeTab === "join" ? "#FFFFFF" : "transparent",
-                color: activeTab === "join" ? "#2563EB" : "#64748B",
+                color: activeTab === "join" ? "#047857" : "#64748B",
                 boxShadow: activeTab === "join" ? "0 2px 6px rgba(15, 23, 42, 0.08)" : "none",
                 fontWeight: 700,
                 fontSize: "14px",
@@ -265,7 +265,7 @@ export function OnboardingPage() {
                 borderRadius: "8px",
                 border: "none",
                 background: activeTab === "create" ? "#FFFFFF" : "transparent",
-                color: activeTab === "create" ? "#2563EB" : "#64748B",
+                color: activeTab === "create" ? "#047857" : "#64748B",
                 boxShadow: activeTab === "create" ? "0 2px 6px rgba(15, 23, 42, 0.08)" : "none",
                 fontWeight: 700,
                 fontSize: "14px",
@@ -319,7 +319,7 @@ export function OnboardingPage() {
                       <Loader2
                         size={16}
                         className="spin"
-                        style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#2563EB" }}
+                        style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#047857" }}
                       />
                     )}
                   </div>
@@ -360,7 +360,7 @@ export function OnboardingPage() {
                         onMouseLeave={(e) => (e.currentTarget.style.background = "#FFFFFF")}
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#EFF6FF", color: "#2563EB", display: "grid", placeItems: "center" }}>
+                          <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "#ECFDF5", color: "#047857", display: "grid", placeItems: "center" }}>
                             <Building2 size={16} />
                           </div>
                           <div>
@@ -374,8 +374,8 @@ export function OnboardingPage() {
                             fontSize: "12px",
                             fontWeight: 700,
                             borderRadius: "6px",
-                            background: "#EFF6FF",
-                            color: "#2563EB",
+                            background: "#ECFDF5",
+                            color: "#047857",
                           }}
                         >
                           Select
@@ -391,8 +391,8 @@ export function OnboardingPage() {
                     style={{
                       padding: "16px 20px",
                       borderRadius: "12px",
-                      background: "#EFF6FF",
-                      border: "1px solid #BFDBFE",
+                      background: "#ECFDF5",
+                      border: "1px solid #B7E4CE",
                       marginBottom: "24px",
                       display: "flex",
                       alignItems: "center",
@@ -400,11 +400,11 @@ export function OnboardingPage() {
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: "#DBEAFE", display: "grid", placeItems: "center", color: "#1D4ED8" }}>
+                      <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: "#D1FAE5", display: "grid", placeItems: "center", color: "#065F46" }}>
                         <Building2 size={20} />
                       </div>
                       <div>
-                        <span style={{ fontSize: "11px", color: "#2563EB", fontWeight: 700, textTransform: "uppercase" }}>
+                        <span style={{ fontSize: "11px", color: "#047857", fontWeight: 700, textTransform: "uppercase" }}>
                           Selected Organization
                         </span>
                         <h4 style={{ color: "#0F172A", fontSize: "16px", fontWeight: 800, margin: 0 }}>
