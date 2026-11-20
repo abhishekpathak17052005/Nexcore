@@ -65,7 +65,7 @@ export function PendingApprovalView() {
   const isRejected = user?.membershipStatus === "rejected" || request?.status === "REJECTED";
 
   return (
-    <div className="landing-container" style={{ minHeight: "100vh", padding: "40px 20px", background: "#F8FAFC" }}>
+    <div className="landing-container pending-membership-page" style={{ minHeight: "100vh", padding: "40px 20px" }}>
       {/* Top Bar */}
       <header
         style={{
@@ -82,13 +82,13 @@ export function PendingApprovalView() {
               width: "38px",
               height: "38px",
               borderRadius: "10px",
-              background: "linear-gradient(135deg, #2563EB, #1D4ED8)",
+              background: "linear-gradient(135deg, #059669, #065F46)",
               display: "grid",
               placeItems: "center",
               color: "#FFFFFF",
               fontWeight: 850,
               fontSize: "16px",
-              boxShadow: "0 4px 12px rgba(37, 99, 235, 0.25)",
+              boxShadow: "0 4px 12px rgba(4, 120, 87, 0.2)",
             }}
           >
             N
@@ -233,7 +233,7 @@ export function PendingApprovalView() {
               <span style={{ fontSize: "11px", color: "#64748B", textTransform: "uppercase", fontWeight: 700 }}>
                 Target Organization
               </span>
-              <p style={{ color: "#2563EB", fontWeight: 800, fontSize: "15px", marginTop: "4px", margin: "4px 0 0" }}>
+              <p style={{ color: "#047857", fontWeight: 800, fontSize: "15px", marginTop: "4px", margin: "4px 0 0" }}>
                 {request?.organizationName ?? "Pending selection"}
               </p>
             </div>
@@ -274,8 +274,8 @@ export function PendingApprovalView() {
                 Application Milestones
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
-                <div style={{ padding: "18px", borderRadius: "12px", background: "#EFF6FF", border: "1px solid #BFDBFE" }}>
-                  <div style={{ color: "#2563EB", marginBottom: "8px" }}><CheckCircle2 size={20} /></div>
+                  <div style={{ padding: "18px", borderRadius: "12px", background: "#ECFDF5", border: "1px solid #B7E4CE" }}>
+                  <div style={{ color: "#047857", marginBottom: "8px" }}><CheckCircle2 size={20} /></div>
                   <strong style={{ display: "block", color: "#0F172A", fontSize: "14px", marginBottom: "4px" }}>1. Account Created</strong>
                   <span style={{ color: "#475569", fontSize: "12px" }}>Secure credentials and profile established.</span>
                 </div>

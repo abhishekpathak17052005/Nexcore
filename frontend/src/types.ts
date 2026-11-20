@@ -163,6 +163,7 @@ export interface TimeEntry {
   consultantId: string;
   clientId: string;
   projectId: string;
+  createdByCurrentUser?: boolean;
   workDate: string;
   description: string;
   hours: number;
