@@ -1,14 +1,14 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Link } from "wouter";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { AlertTriangle, Clock3, RefreshCw, Timer, UsersRound, WalletCards } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { AlertTriangle, Clock3, RefreshCw, Timer, UsersRound, WalletCards, ArrowRight, CheckCircle2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { BackendState } from "@/components/BackendState";
 import { EmptyState, KpiCard, PageHeader, PanelHeader } from "@/components/DashboardPrimitives";
 import { useAuth } from "@/contexts/AuthContext";
 import { availableWorkingHours, formatCurrency, formatNumber, periodDateRange, utilizationFormula } from "@/lib/calculations";
 import { trpc } from "@/lib/trpc";
-import type { Consultant, ReportingPeriod } from "@/types";
+import type { Consultant, ReportingPeriod, TimeEntry } from "@/types";
 import type { BackendStatus } from "@/lib/backendService";
 
 interface HomeProps {
@@ -20,11 +20,13 @@ interface HomeProps {
 }
 
 const currencyOrder = ["USD", "EUR", "GBP"] as const;
-const chartColors = ["#147D73", "#3973C6", "#C1842D", "#65758B"];
 
 export default function Home({ period, onPeriodChange, consultants, backendStatus, onRetry }: HomeProps) {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const now = new Date();
+  const firstName = user?.name?.trim().split(/\s+/)[0] || "there";
+  const greeting = `Good ${now.getHours() < 12 ? "morning" : now.getHours() < 18 ? "afternoon" : "evening"}, ${firstName}`;
   const range = useMemo(() => periodDateRange(period), [period]);
   const canViewMetrics = can("metrics.utilization");
   const canViewFinancials = can("metrics.financial");
@@ -61,6 +63,10 @@ export default function Home({ period, onPeriodChange, consultants, backendStatu
   );
   const retainerAlertsQuery = trpc.retainers.alerts.useQuery(undefined, {
     enabled: canViewRetainers,
+    retry: false,
+  });
+  const personalEntriesQuery = trpc.timeEntries.list.useQuery({ page: 1, pageSize: 100 }, {
+    enabled: user?.role === "consultant",
     retry: false,
   });
 
@@ -110,12 +116,16 @@ export default function Home({ period, onPeriodChange, consultants, backendStatu
   const loading = backendStatus.loading || metricsQuery.isLoading || draftEntriesQuery.isLoading ||
     additionalDraftQueries.some((query) => query.isLoading) || consultantMetricQueries.some((query) => query.isLoading);
 
+  if (user?.role === "consultant") {
+    return <MyWorkspace period={period} onPeriodChange={onPeriodChange} userName={user.name ?? "there"} consultant={consultants.find((item) => item.id === user.consultantId)} entries={personalEntriesQuery.data?.items ?? []} loading={personalEntriesQuery.isLoading} error={personalEntriesQuery.error} onRetry={() => { void personalEntriesQuery.refetch(); }} />;
+  }
+
   return (
     <AppShell period={period} onPeriodChange={onPeriodChange} alertCount={canViewRetainers ? retainerAlertsQuery.data?.length ?? 0 : 0}>
       <div className="dashboard-page overview-dashboard">
         <PageHeader
           eyebrow="Operations overview"
-          title="Overview"
+          title={greeting}
           description="Billable capacity and time-entry activity for the selected reporting period."
           actions={(
             <button className="button button-quiet overview-refresh" onClick={handleRefresh} disabled={refreshing || loading}>
@@ -152,6 +162,9 @@ export default function Home({ period, onPeriodChange, consultants, backendStatu
               <KpiCard label="Pending timesheets" value={formatNumber(metricsQuery.data?.pendingApproval ?? 0)} detail="Submitted entries awaiting review" icon={<AlertTriangle size={17} />} accent={(metricsQuery.data?.pendingApproval ?? 0) > 0 ? "amber" : "teal"}>
                 <div className="kpi-footnote"><Link href="/approvals" className="overview-inline-link">Open approvals</Link></div>
               </KpiCard>
+              <KpiCard label="Non-billable hours" value={`${formatNumber(metricsQuery.data?.approvedNonBillableHours ?? 0)} hrs`} detail="Approved non-billable time" icon={<Clock3 size={17} />} accent="navy">
+                <div className="kpi-footnote">Excluded from billable utilization</div>
+              </KpiCard>
             </section>
 
             <section className="overview-analytics-grid" aria-label="Dashboard analytics">
@@ -180,18 +193,15 @@ export default function Home({ period, onPeriodChange, consultants, backendStatu
                 {consultantUtilization.length === 0 ? (
                   <EmptyState title="No active consultants" description="Active consultant records will appear here." />
                 ) : (
-                  <div className="overview-chart" role="img" aria-label={`Utilization by consultant for ${consultantUtilization.length} active consultants`}>
-                    <ResponsiveContainer width="100%" height={Math.max(250, Math.min(420, consultantUtilization.length * 38))}>
-                      <BarChart data={consultantUtilization} layout="vertical" margin={{ top: 4, right: 22, bottom: 4, left: 8 }}>
-                        <CartesianGrid horizontal={false} stroke="#E6EDF2" />
-                        <XAxis type="number" domain={[0, "dataMax"]} tickLine={false} axisLine={false} tick={{ fill: "#69798B", fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
-                        <YAxis type="category" dataKey="name" width={104} tickLine={false} axisLine={false} tick={{ fill: "#475569", fontSize: 10 }} />
-                        <Tooltip formatter={(value) => [`${value}%`, "Utilization"]} />
-                        <Bar dataKey="utilization" radius={[0, 4, 4, 0]} maxBarSize={20}>
-                          {consultantUtilization.map((entry, index) => <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div className="utilization-heatmap" role="list" aria-label={`Consultant utilization heatmap for ${consultantUtilization.length} active consultants`}>
+                    {consultantUtilization.map((consultant) => {
+                      const intensity = Math.min(100, Math.max(0, consultant.utilization)) / 100;
+                      return <article className={`utilization-heatmap-cell ${consultant.utilization > 100 ? "is-over-capacity" : ""}`} role="listitem" key={consultant.name} style={{ backgroundColor: `rgba(16, 185, 129, ${0.035 + intensity * 0.12})` } as CSSProperties}>
+                        <div className="utilization-heatmap-heading"><strong>{consultant.name}</strong><b>{consultant.utilization}%</b></div>
+                        <div className="utilization-heatmap-track" aria-hidden="true"><i style={{ width: `${intensity * 100}%` }} /></div>
+                        <div className="utilization-heatmap-meta"><span>{formatNumber(consultant.billableHours)} of {formatNumber(consultant.availableHours)} hrs</span>{consultant.utilization > 100 && <em>Over capacity</em>}</div>
+                      </article>;
+                    })}
                   </div>
                 )}
               </article>
@@ -234,6 +244,77 @@ export default function Home({ period, onPeriodChange, consultants, backendStatu
       </div>
     </AppShell>
   );
+}
+
+function MyWorkspace({ period, onPeriodChange, userName, consultant, entries, loading, error, onRetry }: { period: ReportingPeriod; onPeriodChange: (period: ReportingPeriod) => void; userName: string; consultant?: Consultant; entries: TimeEntry[]; loading: boolean; error: unknown; onRetry: () => void }) {
+  const today = new Date();
+  const attendanceQuery = trpc.attendance.status.useQuery(undefined, { retry: false, refetchInterval: 30000 });
+  const signInMutation = trpc.attendance.signIn.useMutation();
+  const signOutMutation = trpc.attendance.signOut.useMutation();
+  const [attendanceError, setAttendanceError] = useState<string | null>(null);
+  const weekday = today.getDay() || 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - weekday + 1);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const week = entries.filter((entry) => entry.workDate >= iso(monday) && entry.workDate <= iso(sunday));
+  const logged = week.filter((entry) => entry.status !== "Rejected").reduce((sum, entry) => sum + entry.hours, 0);
+  const billable = week.filter((entry) => entry.status !== "Rejected" && entry.billingClassification === "Billable").reduce((sum, entry) => sum + entry.hours, 0);
+  const nonBillable = logged - billable;
+  const capacity = consultant?.weeklyCapacityHours;
+  const utilization = capacity && capacity > 0 ? Math.round((billable / capacity) * 100) : null;
+  const projects = Array.from(new Map(entries.filter((entry) => entry.projectReference).map((entry) => [entry.projectId, entry.projectReference!])).values());
+  const recent = [...entries].sort((a, b) => b.workDate.localeCompare(a.workDate)).slice(0, 5);
+  const toggleAttendance = async () => {
+    setAttendanceError(null);
+    try {
+      if (attendanceQuery.data?.isSignedIn) {
+        await signOutMutation.mutateAsync();
+      } else {
+        await signInMutation.mutateAsync();
+      }
+      await attendanceQuery.refetch();
+    } catch (mutationError) {
+      setAttendanceError(mutationError instanceof Error ? mutationError.message : "Could not update attendance status.");
+    }
+  };
+
+  const isSignedIn = attendanceQuery.data?.isSignedIn ?? false;
+  return <AppShell period={period} onPeriodChange={onPeriodChange}><main className="dashboard-page my-workspace">
+    <PageHeader
+      eyebrow="My workspace"
+      title={`Good ${today.getHours() < 12 ? "morning" : today.getHours() < 18 ? "afternoon" : "evening"}, ${userName.split(" ")[0]}`}
+      description="Your time, projects, and timesheet actions for the week."
+      actions={
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {attendanceError && <span style={{ color: "#B42318", fontSize: "12px" }}>{attendanceError}</span>}
+          <button className={`button ${isSignedIn ? "button-quiet" : "button-primary"}`} onClick={() => void toggleAttendance()} disabled={signInMutation.isPending || signOutMutation.isPending}>
+            {signInMutation.isPending || signOutMutation.isPending ? "Updating…" : isSignedIn ? "Sign off" : "Sign in"}
+          </button>
+          <Link href="/time-tracking" className="button button-primary"><Timer size={15} /> Log time</Link>
+        </div>
+      }
+      meta={<span className="last-updated">{isSignedIn ? "Active" : "Offline"} · {iso(monday)} – {iso(sunday)}</span>}
+    />
+    {loading ? <DashboardSkeleton /> : error ? <BackendState error={error} onRetry={onRetry} title="Your timesheets are unavailable" /> : <>
+      <section className="kpi-grid workspace-kpis" aria-label="This week's summary">
+        <KpiCard label="Hours logged" value={`${formatNumber(logged)} hrs`} detail="Draft, submitted, and approved this week" icon={<Clock3 size={17} />} accent="teal" />
+        <KpiCard label="Billable hours" value={`${formatNumber(billable)} hrs`} detail="Not rejected" icon={<Timer size={17} />} accent="blue" />
+        <KpiCard label="Non-billable hours" value={`${formatNumber(nonBillable)} hrs`} detail="Not rejected" icon={<UsersRound size={17} />} accent="navy" />
+        <KpiCard label="My utilization" value={utilization == null ? "—" : `${utilization}%`} detail={capacity ? `${formatNumber(capacity)} hour weekly capacity` : "Capacity not available"} icon={<CheckCircle2 size={17} />} accent={utilization != null && utilization >= 100 ? "amber" : "teal"} />
+      </section>
+      <section className="overview-operations workspace-sections">
+        <article className="panel overview-operation-panel"><PanelHeader eyebrow="Your entries" title="My timesheets" action={<Link href="/time-tracking" className="text-link">View all <ArrowRight size={14} /></Link>} />
+          {recent.length ? <div className="workspace-entry-list">{recent.map((entry) => <div className="workspace-entry" key={entry.id}><span><strong>{entry.projectReference?.name ?? "Project"}</strong><small>{entry.workDate} · {entry.hours} hrs · {entry.billingClassification}</small></span><span className={`workspace-status status-${entry.status.toLowerCase()}`}>{entry.status}</span></div>)}</div> : <EmptyState title="No time entries yet" description="Log your first entry to start your weekly timesheet." />}
+        </article>
+        <article className="panel overview-operation-panel"><PanelHeader eyebrow="From your entries" title="My projects" />
+          {projects.length ? <ul className="workspace-project-list">{projects.map((project) => <li key={project.id}><strong>{project.name}</strong><span>{project.status}</span></li>)}</ul> : <EmptyState title="No project history yet" description="Projects will appear here after time has been recorded against them." />}
+          <Link href="/time-tracking" className="button button-quiet workspace-secondary-action"><Timer size={14} />Open timesheets</Link>
+        </article>
+      </section>
+    </>}
+  </main></AppShell>;
 }
 
 function RevenueKpi({ amounts }: { amounts: Partial<Record<string, number>> }) {
