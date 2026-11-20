@@ -211,14 +211,14 @@ export default function Utilization({ period, onPeriodChange, consultants, timeE
         </div>
 
         {/* Table View */}
-        <article className="panel">
+        <article className="panel utilization-table-panel">
           <PanelHeader
             eyebrow="Individual Capacity Breakdown"
             title="Consultant Utilization Table"
             detail={`Showing ${filteredRecords.length} records for ${period.replace("-", " ")}`}
           />
           <div className="table-scroll">
-            <table>
+            <table className="utilization-table">
               <thead>
                 <tr>
                   <th>

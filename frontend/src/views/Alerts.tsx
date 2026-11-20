@@ -48,7 +48,7 @@ export default function Alerts({ period, onPeriodChange }: AlertsProps) {
           </section>
 
           <article className="panel alert-center-panel">
-            <PanelHeader eyebrow="Retainer contracts" title="Current alerts" detail="Threshold, exceeded, expiring, and expired alerts" />
+            <PanelHeader eyebrow="Retainer contracts" title="Current alerts" detail="Contracts that need attention" />
             <div className="alert-center-toolbar">
               <label className="table-search"><Search size={15} /><span className="sr-only">Search retainer alerts</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by retainer or alert type" /></label>
               <label className="select-control"><Filter size={14} /><span className="sr-only">Filter alerts by severity</span><select value={severity} onChange={(event) => setSeverity(event.target.value as AlertSeverity)}><option value="all">All severities</option><option value="critical">Critical</option><option value="warning">Warning</option></select></label>
@@ -56,7 +56,7 @@ export default function Alerts({ period, onPeriodChange }: AlertsProps) {
 
             {alertsQuery.isLoading && <div className="alert-center-loading" role="status" aria-label="Loading retainer alerts"><div className="overview-skeleton-block" /><div className="overview-skeleton-block" /><span className="sr-only">Loading retainer alerts…</span></div>}
             {alertsQuery.error && <div className="error-panel alert-center-error" role="alert"><p>{backendErrorMessage(alertsQuery.error)}</p><button type="button" className="button button-primary" onClick={() => void alertsQuery.refetch()}><RefreshCw size={14} /> Retry</button></div>}
-            {!alertsQuery.isLoading && !alertsQuery.error && filtered.length === 0 && <EmptyState title={alerts.length ? "No alerts match these filters" : "No retainer alerts"} description={alerts.length ? "Adjust your search or severity filter." : "The backend currently returns no retainer threshold, exceeded-contract, or expiry alerts."} />}
+            {!alertsQuery.isLoading && !alertsQuery.error && filtered.length === 0 && <EmptyState title={alerts.length ? "No alerts match these filters" : "No active retainer alerts"} description={alerts.length ? "Try changing your search or severity." : "Retainer alerts will appear here when action is needed."} />}
 
             {!!filtered.length && <ul className="alert-center-list">{filtered.map((alert) => (
               <li className={`alert-center-item ${alert.severity}`} key={`${alert.retainerId}-${alert.type}`}>
