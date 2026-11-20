@@ -45,6 +45,7 @@ export interface MongoOrganization {
 export interface MongoUser {
   _id: ObjectId;
   openId: string;
+  employeeId?: string;
   name: string | null;
   email: string | null;
   passwordHash?: string | null;
@@ -101,6 +102,25 @@ export interface ClientDocument { _id: ObjectId; organizationId?: ObjectId | nul
 export interface ProjectDocument { _id: ObjectId; organizationId?: ObjectId | null; clientId: ObjectId; name: string; status: "Active" | "On hold" | "Closed"; billingCurrency: CurrencyCode; startDate: string | null; endDate: string | null; createdAt: Date; updatedAt: Date; }
 export interface TimeEntryDocument { _id: ObjectId; organizationId?: ObjectId | null; consultantId: ObjectId; clientId: ObjectId; projectId: ObjectId; workDate: string; description: string; hours: number; billingClassification: BillingClassification; status: TimeEntryStatus; billingRateSnapshot: number | null; currency: CurrencyCode | null; createdBy: ObjectId; createdAt: Date; updatedAt: Date; submittedAt: Date | null; reviewedAt: Date | null; reviewedBy: ObjectId | null; rejectionReason: string | null; }
 export interface ApprovalHistoryDocument { _id: ObjectId; organizationId?: ObjectId | null; timeEntryId: ObjectId; previousStatus: TimeEntryStatus | null; newStatus: TimeEntryStatus; actedBy: ObjectId; rejectionReason: string | null; createdAt: Date; }
+export interface AttendanceDocument {
+  _id: ObjectId;
+  organizationId?: ObjectId | null;
+  userId: ObjectId;
+  consultantId?: ObjectId | null;
+  workDate: string;
+  signInAt: Date;
+  signOutAt: Date | null;
+  durationMinutes: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UserPresenceDocument {
+  _id: ObjectId;
+  organizationId: ObjectId;
+  userId: ObjectId;
+  lastSeenAt: Date;
+}
 
 export type RetainerType = "HOURS" | "AMOUNT";
 export type RetainerStatus = "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
@@ -183,6 +203,10 @@ async function ensureIndexes(db: Db) {
     await db.collection("users").dropIndex("consultantId_1");
   } catch {}
   await db.collection("users").updateMany({ consultantId: null }, { $unset: { consultantId: "" } });
+  await db.collection("users").updateMany(
+    { employeeId: { $exists: false } },
+    [{ $set: { employeeId: { $concat: ["NX-", { $toUpper: { $substrBytes: [{ $toString: "$_id" }, 12, 12] } }] } } }],
+  );
 
   await Promise.all([
     db.collection<MongoOrganization>("organizations").createIndexes([{ key: { slug: 1 }, unique: true }, { key: { name: 1 } }]),
@@ -190,6 +214,7 @@ async function ensureIndexes(db: Db) {
     db.collection<MongoNotification>("notifications").createIndexes([{ key: { recipientUserId: 1, read: 1, createdAt: -1 } }, { key: { organizationId: 1 } }]),
     db.collection<MongoUser>("users").createIndexes([
       { key: { openId: 1 }, unique: true },
+      { key: { employeeId: 1 }, unique: true },
       { key: { email: 1 }, unique: true, sparse: true },
       { key: { role: 1 } },
       { key: { consultantId: 1 }, unique: true, partialFilterExpression: { consultantId: { $type: "objectId" } } },
@@ -200,6 +225,8 @@ async function ensureIndexes(db: Db) {
     db.collection<ProjectDocument>("projects").createIndexes([{ key: { clientId: 1, name: 1 }, unique: true }, { key: { clientId: 1 } }, { key: { organizationId: 1 } }]),
     db.collection<TimeEntryDocument>("timeEntries").createIndexes([{ key: { consultantId: 1, workDate: 1 } }, { key: { status: 1 } }, { key: { projectId: 1, workDate: 1 } }, { key: { consultantId: 1, clientId: 1, projectId: 1, workDate: 1 } }, { key: { organizationId: 1 } }]),
     db.collection<ApprovalHistoryDocument>("timeEntryApprovalHistory").createIndexes([{ key: { timeEntryId: 1, createdAt: -1 } }, { key: { actedBy: 1 } }, { key: { organizationId: 1 } }]),
+    db.collection<AttendanceDocument>("attendance").createIndexes([{ key: { organizationId: 1, userId: 1, signOutAt: 1 } }, { key: { organizationId: 1, workDate: 1 } }, { key: { userId: 1, signInAt: -1 } }]),
+    db.collection<UserPresenceDocument>("userPresence").createIndexes([{ key: { organizationId: 1, userId: 1 }, unique: true }, { key: { lastSeenAt: 1 }, expireAfterSeconds: 600 }]),
     db.collection<RetainerDocument>("retainers").createIndexes([{ key: { clientId: 1 } }, { key: { status: 1 } }, { key: { endDate: 1 } }, { key: { organizationId: 1 } }, { key: { clientId: 1, projectId: 1 } }]),
   ]);
 }

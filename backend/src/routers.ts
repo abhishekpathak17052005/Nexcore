@@ -34,7 +34,8 @@ import { normalizeEmail, verifyPassword } from "./password";
 import { checkRateLimit, clearRateLimit, recordFailedAttempt } from "./rateLimiter";
 import { sdk } from "./_core/sdk";
 import { createHash, randomInt, randomBytes } from "node:crypto";
-import { consumePasswordReset, savePasswordReset } from "./db";
+import { consumePasswordReset, consumePasswordResetForUser, savePasswordReset } from "./db";
+import nodemailer from "nodemailer";
 
 const currency = z.enum(["USD", "EUR", "GBP"]);
 const employmentStatus = z.enum(["Active", "On leave", "Inactive"]);
@@ -302,6 +303,7 @@ export const appRouter = router({
         return {
           id: user._id.toHexString(),
           openId: user.openId,
+          employeeId: user.employeeId ?? `NX-${user._id.toHexString().slice(-12).toUpperCase()}`,
           name: user.name,
           email: user.email,
           role: user.role,
@@ -344,7 +346,69 @@ export const appRouter = router({
               from,
               to: [user.email],
               subject: "Reset your NEXCORE password",
-              html: `<p>We received a request to reset your NEXCORE password.</p><p><a href="${resetUrl}">Choose a new password</a></p><p>This link expires in 1 hour. If you did not request this, you can ignore this email.</p>`,
+              html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset your NEXCORE password</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F7F9F8; color: #10201D;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #F7F9F8; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 16px; box-shadow: 0 4px 16px rgba(7, 27, 24, 0.08); overflow: hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #071B18 0%, #0B2F28 100%); padding: 40px 40px 32px; text-align: center;">
+              <div style="width: 48px; height: 48px; margin: 0 auto 16px; background-color: #0FA968; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                <span style="font-size: 24px; font-weight: 800; color: #FFFFFF; letter-spacing: 0.15em;">N</span>
+              </div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 750; color: #FFFFFF; letter-spacing: 0.12em;">NEXCORE</h1>
+              <p style="margin: 8px 0 0; font-size: 11px; font-weight: 600; color: #7FD4B5; letter-spacing: 0.08em; text-transform: uppercase;">Operations OS</p>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 48px 40px;">
+              <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #071B18;">Reset Your Password</h2>
+              <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6; color: #10201D;">We received a request to reset your NEXCORE password. Click the button below to choose a new password:</p>
+              
+              <!-- Button -->
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 32px 0;">
+                <tr>
+                  <td style="border-radius: 10px; background-color: #0FA968;">
+                    <a href="${resetUrl}" style="display: inline-block; padding: 14px 32px; font-size: 14px; font-weight: 650; color: #FFFFFF; text-decoration: none; border-radius: 10px;">Reset Password</a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="margin: 24px 0 8px; font-size: 13px; line-height: 1.6; color: #6B7C78;">Or copy and paste this link into your browser:</p>
+              <p style="margin: 0 0 24px; padding: 12px 16px; background-color: #F8FBF9; border: 1px solid #E0EBE5; border-radius: 8px; font-size: 12px; color: #0FA968; word-break: break-all;">${resetUrl}</p>
+              
+              <!-- Security Notice -->
+              <div style="margin-top: 32px; padding: 16px; background-color: #FFF9F5; border-left: 3px solid #F79009; border-radius: 8px;">
+                <p style="margin: 0; font-size: 13px; font-weight: 600; color: #7A6651;"><strong>⚠️ Security Notice</strong></p>
+                <p style="margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: #7A6651;">This link expires in 1 hour. If you did not request a password reset, please ignore this email or contact your administrator if you have concerns.</p>
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px; background-color: #F8FBF9; border-top: 1px solid #E8F0EB; text-align: center;">
+              <p style="margin: 0 0 8px; font-size: 12px; color: #6B9B88; font-weight: 500;">NEXCORE Operations OS</p>
+              <p style="margin: 0; font-size: 11px; color: #8FB5A3;">Consulting operations & billing workspace</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
             }),
           });
           if (!response.ok) {
@@ -380,6 +444,127 @@ export const appRouter = router({
           recordFailedAttempt(rateLimitKey);
           throw new TRPCError({ code: "BAD_REQUEST", message: "This reset code or link is invalid or expired. Please request a new one." });
         }
+        return { success: true } as const;
+      }),
+    requestPasswordChangeCode: protectedProcedure.mutation(async ({ ctx }) => {
+      const email = ctx.user.email;
+      if (!email) throw new TRPCError({ code: "BAD_REQUEST", message: "Add an email address to your account before changing your password." });
+      const rateLimitKey = `password-change-code:${ctx.user.id}`;
+      checkRateLimit(rateLimitKey);
+      recordFailedAttempt(rateLimitKey);
+
+      const consoleOtp = process.env.PASSWORD_RESET_CONSOLE_OTP === "true" && process.env.NODE_ENV !== "production";
+      const code = String(randomInt(100000, 1000000));
+      const tokenHash = createHash("sha256").update(code).digest("hex");
+      await savePasswordReset(ctx.user.id, tokenHash, new Date(Date.now() + 10 * 60 * 1000));
+      if (consoleOtp) {
+        const maskedEmail = email.replace(/^(.).+(@.*)$/, "$1***$2");
+        console.info(`[Password Change] OTP for ${maskedEmail}: ${code} (expires in 10 minutes)`);
+        return { success: true, delivery: "console" } as const;
+      }
+
+      const apiKey = process.env.RESEND_API_KEY;
+      const from = process.env.AUTH_EMAIL_FROM || process.env.RESEND_FROM_EMAIL || "NEXCORE <onboarding@resend.dev>";
+      const host = process.env.SMTP_HOST || "smtp.resend.com";
+      const port = Number(process.env.SMTP_PORT || 465);
+      const smtpUser = process.env.SMTP_USER || "resend";
+      const smtpPassword = process.env.SMTP_PASS || apiKey;
+      if (!smtpPassword || !from || !Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Password email delivery is not configured." });
+      }
+      try {
+        const transporter = nodemailer.createTransport({
+          host,
+          port,
+          secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : port === 465,
+          auth: { user: smtpUser, pass: smtpPassword },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 15000,
+        });
+        await transporter.sendMail({
+          from,
+          to: email,
+          subject: "Your NEXCORE password change code",
+          text: `Your password change code is ${code}. It expires in 10 minutes. If you did not request this code, you can ignore this email.`,
+          html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your NEXCORE verification code</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F7F9F8; color: #10201D;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #F7F9F8; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #FFFFFF; border-radius: 16px; box-shadow: 0 4px 16px rgba(7, 27, 24, 0.08); overflow: hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #071B18 0%, #0B2F28 100%); padding: 40px 40px 32px; text-align: center;">
+              <div style="width: 48px; height: 48px; margin: 0 auto 16px; background-color: #0FA968; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                <span style="font-size: 24px; font-weight: 800; color: #FFFFFF; letter-spacing: 0.15em;">N</span>
+              </div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 750; color: #FFFFFF; letter-spacing: 0.12em;">NEXCORE</h1>
+              <p style="margin: 8px 0 0; font-size: 11px; font-weight: 600; color: #7FD4B5; letter-spacing: 0.08em; text-transform: uppercase;">Operations OS</p>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 48px 40px; text-align: center;">
+              <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #071B18;">Password Change Code</h2>
+              <p style="margin: 0 0 32px; font-size: 15px; line-height: 1.6; color: #10201D;">Enter this verification code to complete your password change:</p>
+              
+              <!-- Code Display -->
+              <div style="margin: 32px 0; padding: 24px; background: linear-gradient(135deg, #E8F7F0 0%, #F0F9F5 100%); border: 2px solid #0FA968; border-radius: 12px;">
+                <p style="margin: 0; font-size: 38px; font-weight: 800; color: #0FA968; letter-spacing: 12px; font-variant-numeric: tabular-nums;">${code}</p>
+              </div>
+              
+              <p style="margin: 24px 0 0; font-size: 13px; line-height: 1.6; color: #6B7C78;">This code is valid for <strong style="color: #071B18;">10 minutes</strong>.</p>
+              
+              <!-- Security Notice -->
+              <div style="margin-top: 32px; padding: 16px; background-color: #FFF9F5; border-left: 3px solid #F79009; border-radius: 8px; text-align: left;">
+                <p style="margin: 0; font-size: 13px; font-weight: 600; color: #7A6651;"><strong>⚠️ Security Notice</strong></p>
+                <p style="margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: #7A6651;">If you did not request this code, please ignore this email or contact your administrator immediately if you have concerns about your account security.</p>
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px; background-color: #F8FBF9; border-top: 1px solid #E8F0EB; text-align: center;">
+              <p style="margin: 0 0 8px; font-size: 12px; color: #6B9B88; font-weight: 500;">NEXCORE Operations OS</p>
+              <p style="margin: 0; font-size: 11px; color: #8FB5A3;">Consulting operations & billing workspace</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+        });
+        transporter.close();
+      } catch (error) {
+        console.error("Password change SMTP delivery failed", error instanceof Error ? error.message.slice(0, 200) : "unknown error");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not send the verification code. Check your SMTP settings and try again." });
+      }
+      return { success: true, delivery: "email" } as const;
+    }),
+    changePasswordWithCode: protectedProcedure
+      .input(z.object({ code: z.string().regex(/^\d{6}$/), password: z.string().min(8).max(128) }))
+      .mutation(async ({ ctx, input }) => {
+        const rateLimitKey = `password-change-verify:${ctx.user.id}`;
+        checkRateLimit(rateLimitKey);
+        const tokenHash = createHash("sha256").update(input.code).digest("hex");
+        if (!(await consumePasswordResetForUser(ctx.user.id, tokenHash, input.password))) {
+          recordFailedAttempt(rateLimitKey);
+          throw new TRPCError({ code: "BAD_REQUEST", message: "The code is invalid or expired. Request a new code and try again." });
+        }
+        clearRateLimit(`password-change-code:${ctx.user.id}`);
+        clearRateLimit(rateLimitKey);
         return { success: true } as const;
       }),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -635,6 +820,15 @@ export const appRouter = router({
         }
         return setUserStatus(input.userId, input.status);
       }),
+  }),
+  attendance: router({
+    status: protectedProcedure.query(({ ctx }) => erp.getAttendanceStatus(ctx.user)),
+    organizationStatus: adminProcedure.query(({ ctx }) => erp.listOrganizationAttendance(ctx.user)),
+    signIn: protectedProcedure.mutation(({ ctx }) => erp.signInAttendance(ctx.user)),
+    signOut: protectedProcedure.mutation(({ ctx }) => erp.signOutAttendance(ctx.user)),
+  }),
+  presence: router({
+    heartbeat: protectedProcedure.mutation(({ ctx }) => erp.recordUserPresence(ctx.user)),
   }),
   consultants: router({
     list: permissionProcedure("consultants.read").query(({ ctx }) => erp.listConsultants(ctx.user)),

@@ -25,12 +25,14 @@
     "jose": "6.1.0",
     "mongodb": "^7.7.0",
     "nanoid": "^5.1.5",
+    "nodemailer": "^10.6.0",
     "superjson": "^1.13.3",
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@types/express": "4.17.21",
     "@types/node": "^24.7.0",
+    "@types/nodemailer": "^8.0.2",
     "esbuild": "^0.25.0",
     "tsx": "^4.19.1",
     "typescript": "5.9.3",

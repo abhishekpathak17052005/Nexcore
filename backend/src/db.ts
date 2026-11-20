@@ -32,6 +32,7 @@ function toUser(record: MongoUser): User {
   return {
     id: record._id.toHexString(),
     openId: record.openId,
+    employeeId: record.employeeId ?? `NX-${record._id.toHexString().slice(-12).toUpperCase()}`,
     name: record.name,
     email: record.email,
     loginMethod: record.loginMethod,
@@ -96,6 +97,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   const db = await getMongoDb();
   if (!db) throw new Error("MongoDB is not available");
   const now = new Date();
+  const userId = new ObjectId();
+  const employeeId = `NX-${userId.toHexString().slice(-12).toUpperCase()}`;
   const isOwner = Boolean(ENV.ownerOpenId && user.openId === ENV.ownerOpenId);
   const role = user.role ?? (isOwner ? "admin" : "user");
   const consultantId = user.consultantId === undefined ? undefined : user.consultantId === null ? null : objectId(user.consultantId);
@@ -118,7 +121,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
         updatedAt: now,
       },
       $setOnInsert: {
+        _id: userId,
         openId: user.openId,
+        employeeId,
         role,
         status: user.status ?? "active",
         organizationId: organizationId ?? null,
@@ -189,6 +194,7 @@ export async function createPasswordUser(params: {
   const now = new Date();
   const userId = new ObjectId();
   const openId = `local_${userId.toHexString()}`;
+  const employeeId = `NX-${userId.toHexString().slice(-12).toUpperCase()}`;
 
   const assignedConsultantId = params.consultantId ? objectId(params.consultantId) : null;
   const assignedOrgId = params.organizationId ? objectId(params.organizationId) : null;
@@ -196,6 +202,7 @@ export async function createPasswordUser(params: {
   const newUser: MongoUser = {
     _id: userId,
     openId,
+    employeeId,
     name: params.name.trim(),
     email: normalized,
     passwordHash: hash,
@@ -236,6 +243,22 @@ export async function consumePasswordReset(tokenHash: string, password: string):
     { $set: { passwordHash: hash, passwordSalt: salt, updatedAt: new Date() } },
   );
   await resets.deleteMany({ userId: reset.userId });
+  return true;
+}
+
+export async function consumePasswordResetForUser(userId: string, tokenHash: string, password: string): Promise<boolean> {
+  const db = await getMongoDb();
+  if (!db) throw new Error("MongoDB is not available");
+  const resets = collection<MongoPasswordReset>(db, "password_resets");
+  const userKey = objectId(userId);
+  const reset = await resets.findOneAndDelete({ userId: userKey, tokenHash, expiresAt: { $gt: new Date() } });
+  if (!reset) return false;
+  const { hash, salt } = hashPassword(password);
+  await collection<MongoUser>(db, "users").updateOne(
+    { _id: userKey },
+    { $set: { passwordHash: hash, passwordSalt: salt, updatedAt: new Date() } },
+  );
+  await resets.deleteMany({ userId: userKey });
   return true;
 }
 

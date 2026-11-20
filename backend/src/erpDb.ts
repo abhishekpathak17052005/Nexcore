@@ -1,9 +1,10 @@
 import { TRPCError } from "@trpc/server";
 import { ObjectId, type Filter } from "mongodb";
-import { collection, getMongoClient, requireMongoDb, objectId, type ApprovalHistoryDocument, type ClientDocument, type ConsultantDocument, type ProjectDocument, type TimeEntryDocument } from "./mongo";
+import { collection, getMongoClient, requireMongoDb, objectId, type ApprovalHistoryDocument, type AttendanceDocument, type ClientDocument, type ConsultantDocument, type ProjectDocument, type TimeEntryDocument, type UserPresenceDocument } from "./mongo";
 import { assertNotSelfApproval, assertRecordScope, assertOrganizationScope, hasPermission } from "./authorization";
 import type { User } from "./types";
 import { redactFinancialValues } from "./financialAccess";
+import { listUsers } from "./db";
 
 export type { BillingClassification, CurrencyCode, EmploymentStatus, TimeEntryStatus } from "./mongo";
 import type { BillingClassification, CurrencyCode, EmploymentStatus, TimeEntryStatus } from "./mongo";
@@ -60,7 +61,7 @@ function assertReferenceScope(actor: User) {
   if (actor.role === "consultant") throw new TRPCError({ code: "FORBIDDEN", message: "Your account is not assigned to a project scope." });
 }
 
-function toTimeEntry(row: TimeEntryDocument, actor: User) { return redactFinancialValues({ id: id(row._id), consultantId: id(row.consultantId), clientId: id(row.clientId), projectId: id(row.projectId), workDate: row.workDate, description: row.description, hours: Number(row.hours), billingClassification: row.billingClassification, status: row.status, billingRateSnapshot: row.billingRateSnapshot == null ? null : Number(row.billingRateSnapshot), currency: row.currency, createdAt: date(row.createdAt) ?? "", updatedAt: date(row.updatedAt) ?? "", submittedAt: date(row.submittedAt), reviewedAt: date(row.reviewedAt), reviewedBy: row.reviewedBy ? id(row.reviewedBy) : null, rejectionReason: row.rejectionReason }, actor, ["billingRateSnapshot"] as const); }
+function toTimeEntry(row: TimeEntryDocument, actor: User) { return redactFinancialValues({ id: id(row._id), consultantId: id(row.consultantId), clientId: id(row.clientId), projectId: id(row.projectId), workDate: row.workDate, description: row.description, hours: Number(row.hours), billingClassification: row.billingClassification, status: row.status, billingRateSnapshot: row.billingRateSnapshot == null ? null : Number(row.billingRateSnapshot), currency: row.currency, createdByCurrentUser: row.createdBy.toHexString() === actor.id, createdAt: date(row.createdAt) ?? "", updatedAt: date(row.updatedAt) ?? "", submittedAt: date(row.submittedAt), reviewedAt: date(row.reviewedAt), reviewedBy: row.reviewedBy ? id(row.reviewedBy) : null, rejectionReason: row.rejectionReason }, actor, ["billingRateSnapshot"] as const); }
 
 export interface ConsultantInput { employeeCode: string; firstName: string; lastName: string; email: string; role: string; department: string; employmentStatus: EmploymentStatus; weeklyCapacityHours: number; billingRate: number; currency: CurrencyCode; startDate: string; }
 export interface ClientInput { clientCode: string; name: string; status: "Active" | "Inactive"; defaultCurrency: CurrencyCode; }
@@ -449,3 +450,140 @@ export async function timeEntryMetrics(
   return result;
 }
 export async function listApprovalHistory(value: string, actor: User) { const db = await requireMongoDb(); const entry = await collection<TimeEntryDocument>(db, "timeEntries").findOne({ _id: recordId(value) }); if (!entry) throw new TRPCError({ code: "NOT_FOUND", message: "Time entry not found." }); assertEntryScope(actor, entry); const rows = await collection<ApprovalHistoryDocument>(db, "timeEntryApprovalHistory").find({ timeEntryId: recordId(value) }).sort({ createdAt: -1 }).toArray(); return rows.map((row) => ({ id: id(row._id), timeEntryId: id(row.timeEntryId), previousStatus: row.previousStatus, newStatus: row.newStatus, actedBy: id(row.actedBy), rejectionReason: row.rejectionReason, createdAt: date(row.createdAt) ?? "" })); }
+
+function attendanceFilter(actor: User): Filter<AttendanceDocument> {
+  return { ...orgFilter(actor), userId: recordId(actor.id) };
+}
+
+export async function recordUserPresence(actor: User) {
+  if (!actor.organizationId) throw new TRPCError({ code: "FORBIDDEN", message: "Organization membership is required to report presence." });
+  const db = await requireMongoDb();
+  const organizationId = recordId(actor.organizationId);
+  const userId = recordId(actor.id);
+  const presence = collection<UserPresenceDocument>(db, "userPresence");
+  await presence.updateOne(
+    { organizationId, userId },
+    { $set: { lastSeenAt: new Date() }, $setOnInsert: { organizationId, userId } },
+    { upsert: true },
+  );
+  const onlineCount = await presence.countDocuments({ organizationId, lastSeenAt: { $gte: new Date(Date.now() - 90_000) } });
+  return { onlineCount };
+}
+
+function serializeAttendance(row: AttendanceDocument) {
+  return {
+    id: id(row._id),
+    workDate: row.workDate,
+    signInAt: date(row.signInAt) ?? "",
+    signOutAt: date(row.signOutAt),
+    durationMinutes: Number(row.durationMinutes),
+  };
+}
+
+export async function getAttendanceStatus(actor: User) {
+  const db = await requireMongoDb();
+  const today = new Date().toISOString().slice(0, 10);
+  const attendance = collection<AttendanceDocument>(db, "attendance");
+  const filter = attendanceFilter(actor);
+  const openSession = await attendance.findOne({ ...filter, signOutAt: null });
+  const todaySessions = await attendance.find({ ...filter, workDate: today }).sort({ signInAt: 1 }).toArray();
+  const now = Date.now();
+  const completedMinutes = todaySessions.reduce((total, row) => total + (row.signOutAt ? Number(row.durationMinutes) : 0), 0);
+  const liveMinutes = openSession ? Math.max(0, Math.floor((now - openSession.signInAt.getTime()) / 60000)) : 0;
+
+  return {
+    isSignedIn: Boolean(openSession),
+    openSession: openSession ? serializeAttendance(openSession) : null,
+    todayMinutes: completedMinutes + liveMinutes,
+    todaySessions: todaySessions.map(serializeAttendance),
+  };
+}
+
+export async function listOrganizationAttendance(actor: User) {
+  const db = await requireMongoDb();
+  const today = new Date().toISOString().slice(0, 10);
+  const users = await listUsers(actor.organizationId ?? undefined);
+  const rows = await collection<AttendanceDocument>(db, "attendance")
+    .find({ ...orgFilter(actor), workDate: today })
+    .sort({ signInAt: -1 })
+    .toArray();
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const billableTotals = await collection<TimeEntryDocument>(db, "timeEntries").aggregate<{ _id: ObjectId; billableHours: number; approvedBillableHours: number }>([
+    { $match: { ...orgFilter(actor), workDate: { $gte: monthStart, $lte: today }, billingClassification: "Billable", status: { $in: ["Submitted", "Approved"] } } },
+    { $group: {
+      _id: "$consultantId",
+      billableHours: { $sum: "$hours" },
+      approvedBillableHours: { $sum: { $cond: [{ $eq: ["$status", "Approved"] }, "$hours", 0] } },
+    } },
+  ]).toArray();
+  const billableByConsultant = new Map(billableTotals.map((row) => [id(row._id), row]));
+  const now = Date.now();
+  const byUser = new Map<string, AttendanceDocument[]>();
+  for (const row of rows) {
+    const userRows = byUser.get(id(row.userId)) ?? [];
+    userRows.push(row);
+    byUser.set(id(row.userId), userRows);
+  }
+
+  return users.map((account) => {
+    const sessions = byUser.get(account.id) ?? [];
+    const openSession = sessions.find((session) => session.signOutAt === null);
+    const todayMinutes = sessions.reduce(
+      (total, session) => total + (session.signOutAt ? Number(session.durationMinutes) : Math.max(0, Math.floor((now - session.signInAt.getTime()) / 60000))),
+      0,
+    );
+    return {
+      userId: account.id,
+      name: account.name,
+      email: account.email,
+      role: account.role,
+      status: account.status ?? "active",
+      consultantId: account.consultantId,
+      isSignedIn: Boolean(openSession),
+      signInAt: openSession ? date(openSession.signInAt) : null,
+      todayMinutes,
+      billableHours: account.consultantId ? billableByConsultant.get(account.consultantId)?.billableHours ?? 0 : 0,
+      approvedBillableHours: account.consultantId ? billableByConsultant.get(account.consultantId)?.approvedBillableHours ?? 0 : 0,
+    };
+  });
+}
+
+export async function signInAttendance(actor: User) {
+  const db = await requireMongoDb();
+  const now = new Date();
+  const attendance = collection<AttendanceDocument>(db, "attendance");
+  const filter = attendanceFilter(actor);
+  const openSession = await attendance.findOne({ ...filter, signOutAt: null });
+  if (openSession) throw new TRPCError({ code: "CONFLICT", message: "You are already signed in." });
+
+  const organizationId = actor.organizationId ? recordId(actor.organizationId) : null;
+  const consultantId = actor.consultantId ? recordId(actor.consultantId) : null;
+  const result = await attendance.insertOne({
+    _id: new ObjectId(),
+    organizationId,
+    userId: recordId(actor.id),
+    consultantId,
+    workDate: now.toISOString().slice(0, 10),
+    signInAt: now,
+    signOutAt: null,
+    durationMinutes: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return getAttendanceStatus(actor);
+}
+
+export async function signOutAttendance(actor: User) {
+  const db = await requireMongoDb();
+  const now = new Date();
+  const attendance = collection<AttendanceDocument>(db, "attendance");
+  const openSession = await attendance.findOne({ ...attendanceFilter(actor), signOutAt: null });
+  if (!openSession) throw new TRPCError({ code: "CONFLICT", message: "You are not currently signed in." });
+
+  const durationMinutes = Math.max(0, Math.floor((now.getTime() - openSession.signInAt.getTime()) / 60000));
+  await attendance.updateOne(
+    { _id: openSession._id, ...attendanceFilter(actor), signOutAt: null },
+    { $set: { signOutAt: now, durationMinutes, updatedAt: now } },
+  );
+  return getAttendanceStatus(actor);
+}

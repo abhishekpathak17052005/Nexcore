@@ -9,6 +9,7 @@ export type NotificationType = "JOIN_REQUEST_SUBMITTED" | "JOIN_REQUEST_APPROVED
 export interface User {
   id: string;
   openId: string;
+  employeeId?: string;
   name: string | null;
   email: string | null;
   loginMethod: string | null;
