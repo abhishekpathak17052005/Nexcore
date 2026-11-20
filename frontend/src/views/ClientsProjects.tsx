@@ -319,7 +319,7 @@ export default function ClientsProjects({
 
         {/* Clients Table Tab */}
         {!backendStatus.loading && !backendStatus.error && activeTab === "clients" && (
-          <article className="panel">
+          <article className="panel client-directory-panel">
             <PanelHeader
               eyebrow="Portfolio Directory"
               title="Registered Clients"
@@ -327,7 +327,7 @@ export default function ClientsProjects({
             />
             {filteredClients.length > 0 ? (
               <div className="table-scroll">
-                <table>
+                <table className="client-directory-table">
                   <thead>
                     <tr>
                       <th>Client Code</th>
@@ -356,9 +356,11 @@ export default function ClientsProjects({
                               {client.status}
                             </StatusBadge>
                           </td>
-                          <td style={{ textAlign: "right" }}>
+                          <td className="client-row-actions">
+                            <div>
                             <button type="button" className="button button-quiet" onClick={() => setSelectedDetail({ kind: "client", id: client.id })} aria-label={`View ${client.name} details`}><Eye size={14} /> Details</button>
                             {canManageClients && <button type="button" className="button button-quiet" onClick={() => openClientModal(client)} aria-label={`Edit ${client.name}`}><Edit2 size={14} /> Edit</button>}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -377,7 +379,7 @@ export default function ClientsProjects({
 
         {/* Projects Table Tab */}
         {!backendStatus.loading && !backendStatus.error && activeTab === "projects" && (
-          <article className="panel">
+          <article className="panel project-directory-panel">
             <PanelHeader
               eyebrow="Delivery Engagements"
               title="Project Workstreams"
@@ -385,7 +387,7 @@ export default function ClientsProjects({
             />
             {filteredProjects.length > 0 ? (
               <div className="table-scroll">
-                <table>
+                <table className="project-directory-table">
                   <thead>
                     <tr>
                       <th>Project Name</th>
@@ -420,9 +422,11 @@ export default function ClientsProjects({
                               {project.status}
                             </StatusBadge>
                           </td>
-                          <td style={{ textAlign: "right" }}>
+                          <td className="project-row-actions">
+                            <div>
                             <button type="button" className="button button-quiet" onClick={() => setSelectedDetail({ kind: "project", id: project.id })} aria-label={`View ${project.name} details`}><Eye size={14} /> Details</button>
                             {canManageProjects && <button type="button" className="button button-quiet" onClick={() => openProjectModal(project)} aria-label={`Edit ${project.name}`}><Edit2 size={14} /> Edit</button>}
+                            </div>
                           </td>
                         </tr>
                       );
