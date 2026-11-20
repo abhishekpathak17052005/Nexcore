@@ -24,6 +24,16 @@ services:
         value: "lax"
       - key: CORS_ALLOWED_ORIGINS
         value: "https://nexcore-frontend.onrender.com,https://nexcore-backend-z808.onrender.com,http://localhost:3000,http://localhost:5000"
+      - key: FRONTEND_URL
+        value: "https://nexcore-frontend.onrender.com"
+      - key: APP_URL
+        value: "https://nexcore-frontend.onrender.com"
+      - key: AUTH_EMAIL_FROM
+        value: "NEXCORE <onboarding@resend.dev>"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: PASSWORD_RESET_CONSOLE_OTP
+        value: "false"
 
   # 2. Frontend Client Service
   - type: web
