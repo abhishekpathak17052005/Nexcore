@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DollarSign, ShieldAlert, AlertCircle, Building2, User, Briefcase, Filter, Search } from "lucide-react";
+import { DollarSign, ShieldAlert, AlertCircle, Filter, Search } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState, KpiCard, PanelHeader } from "@/components/DashboardPrimitives";
 import { useAuth } from "@/contexts/AuthContext";
@@ -85,34 +85,36 @@ export default function RevenueAnalytics({
 
   // Revenue by Consultant
   const revenueByConsultant = useMemo(() => {
-    return consultants.map((c) => {
+    return consultants.flatMap((c) => {
       const cEntries = billableEntries.filter((e) => e.consultantId === c.id);
-      const hours = cEntries.reduce((sum, e) => sum + e.hours, 0);
-      const revenue = cEntries.reduce((sum, e) => sum + (e.billingRateSnapshot ?? 0) * e.hours, 0);
-      return {
-        ...c,
-        billableHours: hours,
-        estimatedRevenue: revenue,
-        entryCount: cEntries.length,
-      };
+      const byCurrency = new Map<CurrencyCode, { billableHours: number; estimatedRevenue: number; entryCount: number }>();
+      cEntries.forEach((entry) => {
+        const totals = byCurrency.get(entry.currency!) ?? { billableHours: 0, estimatedRevenue: 0, entryCount: 0 };
+        totals.billableHours += entry.hours;
+        totals.estimatedRevenue += (entry.billingRateSnapshot ?? 0) * entry.hours;
+        totals.entryCount += 1;
+        byCurrency.set(entry.currency!, totals);
+      });
+      return Array.from(byCurrency, ([currency, totals]) => ({ ...c, currency, ...totals }));
     }).filter((c) => c.entryCount > 0)
-      .sort((a, b) => b.estimatedRevenue - a.estimatedRevenue);
+      .sort((a, b) => a.name.localeCompare(b.name) || a.currency.localeCompare(b.currency));
   }, [consultants, billableEntries]);
 
   // Revenue by Client
   const revenueByClient = useMemo(() => {
-    return clients.map((cl) => {
+    return clients.flatMap((cl) => {
       const clEntries = billableEntries.filter((e) => e.clientId === cl.id);
-      const hours = clEntries.reduce((sum, e) => sum + e.hours, 0);
-      const revenue = clEntries.reduce((sum, e) => sum + (e.billingRateSnapshot ?? 0) * e.hours, 0);
-      return {
-        ...cl,
-        billableHours: hours,
-        estimatedRevenue: revenue,
-        entryCount: clEntries.length,
-      };
+      const byCurrency = new Map<CurrencyCode, { billableHours: number; estimatedRevenue: number; entryCount: number }>();
+      clEntries.forEach((entry) => {
+        const totals = byCurrency.get(entry.currency!) ?? { billableHours: 0, estimatedRevenue: 0, entryCount: 0 };
+        totals.billableHours += entry.hours;
+        totals.estimatedRevenue += (entry.billingRateSnapshot ?? 0) * entry.hours;
+        totals.entryCount += 1;
+        byCurrency.set(entry.currency!, totals);
+      });
+      return Array.from(byCurrency, ([currency, totals]) => ({ ...cl, currency, ...totals }));
     }).filter((cl) => cl.entryCount > 0)
-      .sort((a, b) => b.estimatedRevenue - a.estimatedRevenue);
+      .sort((a, b) => a.name.localeCompare(b.name) || a.currency.localeCompare(b.currency));
   }, [clients, billableEntries]);
 
   // Filtered transaction-level records
@@ -152,8 +154,8 @@ export default function RevenueAnalytics({
 
   return (
     <AppShell period={period} onPeriodChange={onPeriodChange}>
-      <div className="dashboard-page">
-        <div className="page-heading-row">
+      <div className="dashboard-page revenue-analytics-page">
+        <div className="page-heading-row revenue-heading">
           <div>
             <p className="eyebrow">Financial intelligence <span className="eyebrow-dot" /></p>
             <h1>Revenue Analytics</h1>
@@ -164,7 +166,7 @@ export default function RevenueAnalytics({
         </div>
 
         {/* Currency Distinct KPI Cards */}
-        <section className="kpi-grid" style={{ marginBottom: "20px" }}>
+        <section className="kpi-grid revenue-kpi-grid" aria-label="Estimated revenue by currency">
           <KpiCard
             label="USD Estimated Revenue"
             value={formatCurrency(revenueByCurrency.USD.estimatedRevenue, true, "USD")}
@@ -197,20 +199,19 @@ export default function RevenueAnalytics({
         </section>
 
         {/* Financial Accounting Integrity Notice */}
-        <div className="panel" style={{ padding: "16px", marginBottom: "20px", background: "#F7FAFC", borderLeft: "4px solid #3182CE" }}>
-          <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
-            <AlertCircle size={18} style={{ color: "#3182CE", marginTop: 2, flexShrink: 0 }} />
-            <div style={{ fontSize: "13px", color: "#2D3748" }}>
-              <strong>Revenue Categorization Disclosure:</strong> The metrics shown above represent <em>Estimated Billable Revenue</em> derived from billable client hours and captured rate snapshots. 
-              <strong> Invoiced Revenue</strong> and <strong>Collected Payments</strong> are unconfigured in the current data model and are marked unavailable. Currency amounts are tracked separately to avoid fabricated cross-currency totals.
+        <div className="panel revenue-disclosure-panel">
+          <div className="revenue-disclosure-content">
+            <AlertCircle size={19} className="revenue-disclosure-icon" />
+            <div className="revenue-disclosure-copy">
+              <strong>Revenue note:</strong> Estimates use billable hours and saved rates. Invoiced revenue and payments aren’t available.
             </div>
           </div>
         </div>
 
         {/* Breakdown Panels */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+        <div className="revenue-breakdown-grid">
           {/* Revenue by Client */}
-          <article className="panel">
+          <article className="panel revenue-breakdown-panel">
             <PanelHeader
               eyebrow="Account Distribution"
               title="Revenue by Client"
@@ -228,14 +229,14 @@ export default function RevenueAnalytics({
                 </thead>
                 <tbody>
                   {revenueByClient.map((cl) => (
-                    <tr key={cl.id}>
+                    <tr key={`${cl.id}-${cl.currency}`}>
                       <td>
                         <strong>{cl.name}</strong>
                         <div style={{ fontSize: "11px", color: "#718096" }}>{cl.clientCode}</div>
                       </td>
-                      <td><span className="badge badge-currency">{cl.defaultCurrency}</span></td>
+                      <td><span className="badge badge-currency">{cl.currency}</span></td>
                       <td className="number-cell">{cl.billableHours}h</td>
-                      <td className="revenue-cell">{formatCurrency(cl.estimatedRevenue, false, cl.defaultCurrency)}</td>
+                      <td className="revenue-cell">{formatCurrency(cl.estimatedRevenue, false, cl.currency)}</td>
                     </tr>
                   ))}
                   {revenueByClient.length === 0 && (
@@ -251,7 +252,7 @@ export default function RevenueAnalytics({
           </article>
 
           {/* Revenue by Consultant */}
-          <article className="panel">
+          <article className="panel revenue-breakdown-panel">
             <PanelHeader
               eyebrow="Delivery Generation"
               title="Revenue by Consultant"
@@ -269,7 +270,7 @@ export default function RevenueAnalytics({
                 </thead>
                 <tbody>
                   {revenueByConsultant.map((c) => (
-                    <tr key={c.id}>
+                    <tr key={`${c.id}-${c.currency}`}>
                       <td>
                         <strong>{c.name}</strong>
                         <div style={{ fontSize: "11px", color: "#718096" }}>{c.employeeCode}</div>
@@ -293,13 +294,13 @@ export default function RevenueAnalytics({
         </div>
 
         {/* Transaction Level Audit Records */}
-        <article className="panel">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #E2E8F0" }}>
+        <article className="panel revenue-audit-panel">
+          <div className="revenue-audit-header">
             <div>
               <p className="eyebrow" style={{ margin: 0 }}>Transaction-Level Audit</p>
               <h2 style={{ fontSize: "18px", fontWeight: 700, margin: "4px 0 0 0" }}>Supporting Time Entries</h2>
             </div>
-            <div className="table-filters" style={{ margin: 0 }}>
+            <div className="table-filters revenue-audit-filters">
               <label className="table-search">
                 <Search size={14} />
                 <input

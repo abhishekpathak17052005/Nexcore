@@ -181,7 +181,7 @@ export default function Reports({ period, onPeriodChange, consultants, clients, 
         <PageHeader
           eyebrow="Reporting"
           title="Reports"
-          description="Export organization-scoped operational reports. CSV files are assembled in your browser from the existing Nexcore API procedures; no backend CSV export endpoint is available."
+          description="Review utilization, consultant time, and client audit reports."
           actions={<button type="button" className="button button-primary" onClick={handleExport} disabled={queryLoading || pageHasError || rowsAvailable === 0}><Download size={16} /> Download CSV</button>}
         />
 
