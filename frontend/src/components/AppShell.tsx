@@ -148,7 +148,6 @@ export function AppShell({ children, period, onPeriodChange, alertCount = 0 }: A
             {!collapsed && (
               <span>
                 <strong>NEXCORE</strong>
-                <small>{orgQuery.data?.name ?? "OPS CONSOLE"}</small>
               </span>
             )}
           </Link>
