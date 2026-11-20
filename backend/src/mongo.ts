@@ -227,6 +227,7 @@ async function ensureIndexes(db: Db) {
     db.collection<ApprovalHistoryDocument>("timeEntryApprovalHistory").createIndexes([{ key: { timeEntryId: 1, createdAt: -1 } }, { key: { actedBy: 1 } }, { key: { organizationId: 1 } }]),
     db.collection<AttendanceDocument>("attendance").createIndexes([{ key: { organizationId: 1, userId: 1, signOutAt: 1 } }, { key: { organizationId: 1, workDate: 1 } }, { key: { userId: 1, signInAt: -1 } }]),
     db.collection<UserPresenceDocument>("userPresence").createIndexes([{ key: { organizationId: 1, userId: 1 }, unique: true }, { key: { lastSeenAt: 1 }, expireAfterSeconds: 600 }]),
+    db.collection("rateLimits").createIndex({ resetAt: 1 }, { expireAfterSeconds: 0 }),
     db.collection<RetainerDocument>("retainers").createIndexes([{ key: { clientId: 1 } }, { key: { status: 1 } }, { key: { endDate: 1 } }, { key: { organizationId: 1 } }, { key: { clientId: 1, projectId: 1 } }]),
   ]);
 }

@@ -31,7 +31,7 @@ import {
   markAllNotificationsAsRead,
 } from "./db";
 import { normalizeEmail, verifyPassword } from "./password";
-import { checkRateLimit, clearRateLimit, recordFailedAttempt } from "./rateLimiter";
+import { clearDistributedRateLimit, consumeRateLimit } from "./rateLimiter";
 import { sdk } from "./_core/sdk";
 import { createHash, randomInt, randomBytes } from "node:crypto";
 import { consumePasswordReset, consumePasswordResetForUser, savePasswordReset } from "./db";
@@ -274,11 +274,10 @@ export const appRouter = router({
         const normalized = normalizeEmail(input.email);
         const rateLimitKey = `${ip}:${normalized}`;
 
-        checkRateLimit(rateLimitKey);
+        await consumeRateLimit(rateLimitKey);
 
         const user = await getAuthUserByEmail(normalized);
         if (!user || !user.passwordHash || !user.passwordSalt || !verifyPassword(input.password, user.passwordHash, user.passwordSalt)) {
-          recordFailedAttempt(rateLimitKey);
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Invalid email or password.",
@@ -292,7 +291,7 @@ export const appRouter = router({
           });
         }
 
-        clearRateLimit(rateLimitKey);
+        await clearDistributedRateLimit(rateLimitKey);
 
         const token = await sdk.createSessionToken(user.openId, { name: user.name || user.email || "" });
         const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -319,8 +318,7 @@ export const appRouter = router({
         const normalizedEmail = normalizeEmail(input.email);
         const ip = ctx.req.ip || ctx.req.socket?.remoteAddress || "127.0.0.1";
         const rateLimitKey = `password-reset:${ip}:${normalizedEmail}`;
-        checkRateLimit(rateLimitKey);
-        recordFailedAttempt(rateLimitKey);
+        await consumeRateLimit(rateLimitKey);
 
         const consoleOtp = process.env.PASSWORD_RESET_CONSOLE_OTP === "true" && process.env.NODE_ENV !== "production";
         const user = await getAuthUserByEmail(normalizedEmail);
@@ -438,10 +436,9 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const ip = ctx.req.ip || ctx.req.socket?.remoteAddress || "127.0.0.1";
         const rateLimitKey = `reset-password:${ip}`;
-        checkRateLimit(rateLimitKey);
+        await consumeRateLimit(rateLimitKey);
         const tokenHash = createHash("sha256").update(input.code ?? input.token!).digest("hex");
         if (!(await consumePasswordReset(tokenHash, input.password))) {
-          recordFailedAttempt(rateLimitKey);
           throw new TRPCError({ code: "BAD_REQUEST", message: "This reset code or link is invalid or expired. Please request a new one." });
         }
         return { success: true } as const;
@@ -450,8 +447,7 @@ export const appRouter = router({
       const email = ctx.user.email;
       if (!email) throw new TRPCError({ code: "BAD_REQUEST", message: "Add an email address to your account before changing your password." });
       const rateLimitKey = `password-change-code:${ctx.user.id}`;
-      checkRateLimit(rateLimitKey);
-      recordFailedAttempt(rateLimitKey);
+      await consumeRateLimit(rateLimitKey);
 
       const consoleOtp = process.env.PASSWORD_RESET_CONSOLE_OTP === "true" && process.env.NODE_ENV !== "production";
       const code = String(randomInt(100000, 1000000));
@@ -557,14 +553,13 @@ export const appRouter = router({
       .input(z.object({ code: z.string().regex(/^\d{6}$/), password: z.string().min(8).max(128) }))
       .mutation(async ({ ctx, input }) => {
         const rateLimitKey = `password-change-verify:${ctx.user.id}`;
-        checkRateLimit(rateLimitKey);
+        await consumeRateLimit(rateLimitKey);
         const tokenHash = createHash("sha256").update(input.code).digest("hex");
         if (!(await consumePasswordResetForUser(ctx.user.id, tokenHash, input.password))) {
-          recordFailedAttempt(rateLimitKey);
           throw new TRPCError({ code: "BAD_REQUEST", message: "The code is invalid or expired. Request a new code and try again." });
         }
-        clearRateLimit(`password-change-code:${ctx.user.id}`);
-        clearRateLimit(rateLimitKey);
+        await clearDistributedRateLimit(`password-change-code:${ctx.user.id}`);
+        await clearDistributedRateLimit(rateLimitKey);
         return { success: true } as const;
       }),
     logout: publicProcedure.mutation(({ ctx }) => {
