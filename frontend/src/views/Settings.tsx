@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { User, Shield, Sliders, Database, UserCheck, AlertCircle, Check, CheckCircle2, Building2, UserPlus, X, Clock, Sparkles, XCircle } from "lucide-react";
+import { User, Shield, Sliders, Database, UserCheck, AlertCircle, Check, CheckCircle2, Building2, UserPlus, X, Clock, Sparkles, XCircle, KeyRound, MailCheck } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { PanelHeader, StatusBadge } from "@/components/DashboardPrimitives";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,46 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
   const [prefPeriod, setPrefPeriod] = useState<ReportingPeriod>(period);
   const [targetUtilization, setTargetUtilization] = useState(75);
   const [savedMsg, setSavedMsg] = useState(false);
+  const [passwordChangeOpen, setPasswordChangeOpen] = useState(false);
+  const [passwordCodeSent, setPasswordCodeSent] = useState(false);
+  const [passwordCode, setPasswordCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const requestPasswordCodeMutation = trpc.auth.requestPasswordChangeCode.useMutation({
+    onSuccess: (result) => {
+      setPasswordCodeSent(true);
+      toast.success(result.delivery === "console" ? "Verification code generated. Check the backend console." : "Verification code sent to your account email.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const changePasswordMutation = trpc.auth.changePasswordWithCode.useMutation({
+    onSuccess: () => {
+      setPasswordChangeOpen(false);
+      setPasswordCodeSent(false);
+      setPasswordCode("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      toast.success("Your password has been changed.");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const submitPasswordChange = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (passwordCode.length !== 6) {
+      toast.error("Enter the full 6-digit verification code from your email.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("Your new password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      toast.error("The passwords do not match.");
+      return;
+    }
+    changePasswordMutation.mutate({ code: passwordCode, password: newPassword });
+  };
 
   // Admin user management state
   const isAdmin = user?.role === "admin";
@@ -191,9 +231,9 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+        <div className="settings-grid">
           {/* User Profile Card */}
-          <article className="panel" style={{ padding: "24px" }}>
+          <article className="panel settings-card">
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
               <User size={20} color="#2B6CB0" />
               <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>User Profile</h2>
@@ -203,6 +243,10 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
               <div>
                 <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>Display Name</span>
                 <strong>{user?.name || "Not provided"}</strong>
+              </div>
+              <div>
+                <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>Employee ID</span>
+                <strong>{user?.employeeId ?? "—"}</strong>
               </div>
               <div>
                 <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>Email Address</span>
@@ -223,10 +267,33 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
                 </div>
               )}
             </div>
+            <section className="profile-password-section" aria-label="Password settings">
+              <div className="profile-password-heading">
+                <div><KeyRound size={16} /><strong>Password</strong></div>
+                <button type="button" className="button button-quiet" onClick={() => { setPasswordChangeOpen((open) => !open); setPasswordCodeSent(false); setPasswordCode(""); setNewPassword(""); setConfirmNewPassword(""); }}>
+                  {passwordChangeOpen ? "Cancel" : "Change password"}
+                </button>
+              </div>
+              {passwordChangeOpen && !passwordCodeSent && <div className="profile-password-prompt">
+                <p>A one-time code will be sent to <strong>{user?.email || "your account email"}</strong>. It expires in 10 minutes.</p>
+                <button type="button" className="button button-primary" disabled={!user?.email || requestPasswordCodeMutation.isPending} onClick={() => requestPasswordCodeMutation.mutate()}>
+                  <MailCheck size={15} />{requestPasswordCodeMutation.isPending ? "Sending code…" : "Send verification code"}
+                </button>
+              </div>}
+              {passwordChangeOpen && passwordCodeSent && <form className="profile-password-form" onSubmit={submitPasswordChange}>
+                <label><span>6-digit verification code</span><input value={passwordCode} onChange={(event) => setPasswordCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} required /><small className={passwordCode.length === 6 ? "is-complete" : ""}>{passwordCode.length} of 6 digits entered</small></label>
+                <label><span>New password</span><input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" maxLength={128} required /></label>
+                <label><span>Confirm new password</span><input type="password" value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} autoComplete="new-password" maxLength={128} required /></label>
+                <div className="profile-password-form-actions">
+                  <button type="button" className="button button-quiet" disabled={requestPasswordCodeMutation.isPending} onClick={() => requestPasswordCodeMutation.mutate()}>{requestPasswordCodeMutation.isPending ? "Sending…" : "Resend code"}</button>
+                  <button type="submit" className="button button-primary" disabled={changePasswordMutation.isPending || passwordCode.length !== 6 || newPassword.length < 8}>{changePasswordMutation.isPending ? "Updating…" : "Update password"}</button>
+                </div>
+              </form>}
+            </section>
           </article>
 
           {/* Assigned Permissions Matrix */}
-          <article className="panel" style={{ padding: "24px" }}>
+          <article className="panel settings-card">
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
               <Shield size={20} color="#2B6CB0" />
               <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>Active Role Permissions</h2>
@@ -263,9 +330,9 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
         </div>
 
         {/* Reporting Preferences & Organization Info */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+        <div className="settings-grid">
           {/* Preferences */}
-          <article className="panel" style={{ padding: "24px" }}>
+          <article className="panel settings-card">
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
               <Sliders size={20} color="#2B6CB0" />
               <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>Reporting Preferences</h2>
@@ -310,7 +377,7 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
           </article>
 
           {/* Organization Info */}
-          <article className="panel" style={{ padding: "24px" }}>
+          <article className="panel settings-card">
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
               <Building2 size={20} color="#2B6CB0" />
               <h2 style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>Organization</h2>
@@ -319,11 +386,11 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "14px" }}>
               <div>
                 <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>Organization Name</span>
-                <strong>{orgQuery.data?.name || "Nexcore Technologies"}</strong>
+                <strong>{orgQuery.data?.name || "Organization unavailable"}</strong>
               </div>
               <div>
                 <span style={{ color: "#718096", display: "block", fontSize: "12px" }}>Organization ID</span>
-                <code style={{ fontSize: "12px" }}>{orgQuery.data?.slug || "nexcore-tech"}</code>
+                <code style={{ fontSize: "12px" }}>{orgQuery.data?.slug || "—"}</code>
               </div>
               {isAdmin && (
                 <div style={{ marginTop: "8px", padding: "10px", background: "#EBF8FF", borderRadius: "6px", border: "1px solid #BEE3F8" }}>
@@ -344,7 +411,7 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
         {isAdmin && (
           <>
             {/* Join Requests Review Panel */}
-            <article className="panel" style={{ marginBottom: "24px" }}>
+            <article className="panel settings-join-requests-panel" style={{ marginBottom: "24px" }}>
               <PanelHeader
                 eyebrow="Access Requests"
                 title="Organization Join Requests"
@@ -682,7 +749,7 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
 
         {/* Administrative User Role Management (Admin-only) */}
         {isAdmin && (
-          <article className="panel">
+          <article className="panel settings-user-admin-panel">
             <PanelHeader
               eyebrow="Administrative Control"
               title="User & Role Management"
@@ -824,7 +891,7 @@ export default function Settings({ period, onPeriodChange, consultants }: Settin
                       <tr key={u.id}>
                         <td data-label="User">
                           <strong>{u.name || "Anonymous User"}</strong>
-                          <div style={{ fontSize: "11px", color: "#718096" }}>{u.openId}</div>
+                          <div style={{ fontSize: "11px", color: "#718096" }}>{u.employeeId}</div>
                         </td>
                         <td data-label="Email">{u.email || "—"}</td>
                         <td data-label="Current role"><span className="badge" style={{ textTransform: "uppercase" }}>{u.role}</span>

@@ -93,8 +93,8 @@ function ProtectedView({
           <p style={{ color: "#94A3B8", fontSize: "14px", lineHeight: "1.5", marginBottom: "24px" }}>
             This section contains restricted operations. Please sign in to verify your credentials.
           </p>
-          <Link href="/" className="btn-auth-submit" style={{ display: "inline-flex", width: "100%", justifyContent: "center" }}>
-            Return to Landing & Sign In
+          <Link href="/?auth=login" className="btn-auth-submit" style={{ display: "inline-flex", width: "100%", justifyContent: "center" }}>
+            Log In to View Billable Hours
           </Link>
         </div>
       </div>
@@ -344,7 +344,7 @@ function Router({
       </Route>
       <Route path="/settings">
         {() => (
-          <ProtectedView permission="users.manage">
+          <ProtectedView>
             <Settings
               period={period}
               onPeriodChange={onPeriodChange}

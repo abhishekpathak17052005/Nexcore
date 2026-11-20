@@ -17,6 +17,7 @@ export type MembershipStatus = "active" | "pending" | "rejected" | "unassigned";
 
 export interface AuthUser {
   id: string;
+  employeeId?: string;
   openId?: string;
   name: string | null;
   email: string | null;
