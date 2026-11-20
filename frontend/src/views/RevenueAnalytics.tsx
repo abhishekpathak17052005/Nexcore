@@ -311,7 +311,7 @@ export default function RevenueAnalytics({
               </label>
               <label className="select-control">
                 <Filter size={14} />
-                <select value={selectedCurrency} onChange={(e) => setSelectedCurrency(e.target.value as any)}>
+                <select value={selectedCurrency} onChange={(e) => setSelectedCurrency(e.target.value as CurrencyCode | "All")}>
                   <option value="All">All currencies</option>
                   {availableCurrencies.map((cur) => (
                     <option key={cur} value={cur}>{cur}</option>

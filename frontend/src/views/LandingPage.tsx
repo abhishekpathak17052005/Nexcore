@@ -898,7 +898,7 @@ export default function LandingPage({ onSignInSuccess }: LandingPageProps) {
                     <label>Requested Role</label>
                     <select
                       value={requestedRole}
-                      onChange={(e) => setRequestedRole(e.target.value as any)}
+                      onChange={(e) => setRequestedRole(e.target.value as "consultant" | "manager" | "finance")}
                       style={{ width: "100%", padding: "11px 14px", background: "#F8FAFC", color: "#0F172A", border: "1px solid #CBD5E1", borderRadius: "8px", fontSize: "14px" }}
                     >
                       <option value="consultant">Consultant</option>

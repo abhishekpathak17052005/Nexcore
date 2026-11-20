@@ -577,7 +577,7 @@ function App() {
             value={{
               user: authQuery.data ?? null,
               loading: authQuery.isLoading,
-              refresh: () => authQuery.refetch(),
+              refresh: async () => (await authQuery.refetch()).data ?? null,
               logout: handleLogout,
             }}
           >

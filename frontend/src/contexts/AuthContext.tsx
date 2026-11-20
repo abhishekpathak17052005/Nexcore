@@ -31,7 +31,7 @@ export interface AuthUser {
 const AuthContext = createContext<{
   user: AuthUser | null;
   loading: boolean;
-  refresh?: () => Promise<any>;
+  refresh?: () => Promise<AuthUser | null>;
   logout?: () => Promise<void>;
 }>({ user: null, loading: true });
 

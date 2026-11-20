@@ -439,7 +439,7 @@ export function OnboardingPage() {
                   </label>
                   <select
                     value={requestedRole}
-                    onChange={(e) => setRequestedRole(e.target.value as any)}
+                    onChange={(e) => setRequestedRole(e.target.value as "consultant" | "manager" | "finance")}
                     style={{
                       width: "100%",
                       padding: "12px 14px",
