@@ -26,6 +26,9 @@ async function start() {
   const app = express();
   const server = createServer(app);
 
+  // Trust reverse proxy for accurate IP resolution in rate limiters
+  app.set("trust proxy", 1);
+
   // CORS middleware with trusted origin restrictions
   const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
     ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((s) => s.trim())
@@ -77,8 +80,8 @@ async function start() {
     next();
   });
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.use(express.json({ limit: "2mb" }));
+  app.use(express.urlencoded({ limit: "2mb", extended: true }));
 
   app.get("/", (_req, res) => res.json({ status: "ok", service: "Nexcore — Consultant Utilization & Billing API", version: "1.0.0" }));
   

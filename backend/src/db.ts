@@ -240,7 +240,7 @@ export async function consumePasswordReset(tokenHash: string, password: string):
   const { hash, salt } = hashPassword(password);
   await collection<MongoUser>(db, "users").updateOne(
     { _id: reset.userId },
-    { $set: { passwordHash: hash, passwordSalt: salt, updatedAt: new Date() } },
+    { $set: { passwordHash: hash, passwordSalt: salt, updatedAt: new Date() }, $inc: { sessionVersion: 1 } },
   );
   await resets.deleteMany({ userId: reset.userId });
   return true;
@@ -256,7 +256,7 @@ export async function consumePasswordResetForUser(userId: string, tokenHash: str
   const { hash, salt } = hashPassword(password);
   await collection<MongoUser>(db, "users").updateOne(
     { _id: userKey },
-    { $set: { passwordHash: hash, passwordSalt: salt, updatedAt: new Date() } },
+    { $set: { passwordHash: hash, passwordSalt: salt, updatedAt: new Date() }, $inc: { sessionVersion: 1 } },
   );
   await resets.deleteMany({ userId: userKey });
   return true;

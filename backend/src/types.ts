@@ -17,6 +17,7 @@ export interface User {
   status?: UserStatus;
   organizationId?: string | null;
   membershipStatus?: MembershipStatus;
+  sessionVersion?: number;
   consultantId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -32,6 +33,7 @@ export interface InsertUser {
   status?: UserStatus;
   organizationId?: string | null;
   membershipStatus?: MembershipStatus;
+  sessionVersion?: number;
   loginMethod?: string | null;
   role?: UserRole;
   consultantId?: string | null;
