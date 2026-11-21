@@ -14,19 +14,22 @@ RUN pnpm install --frozen-lockfile --filter=nexcore-backend...
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/backend/node_modules ./backend/node_modules
-COPY backend ./backend
+COPY . .
 WORKDIR /app/backend
 RUN pnpm run build
 
 # Production stage
 FROM base AS runner
 ENV NODE_ENV=production
-WORKDIR /app/backend
+WORKDIR /app
 
-# Copy built dist and dependencies
-COPY --from=builder /app/backend/dist ./dist
-COPY --from=builder /app/backend/package.json ./package.json
-COPY --from=builder /app/backend/node_modules ./node_modules
+# Copy root node_modules containing .pnpm store and symlink targets
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/backend/node_modules ./backend/node_modules
+COPY --from=builder /app/backend/dist ./backend/dist
+COPY --from=builder /app/backend/package.json ./backend/package.json
+
+WORKDIR /app/backend
 
 EXPOSE 5000
 ENV PORT=5000
