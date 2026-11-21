@@ -1,0 +1,79 @@
+﻿version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: nexcore-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: consultant_utilization_dashboard
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - nexcore-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Service
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: nexcore-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DB_NAME: consultant_utilization_dashboard
+      SESSION_SECRET: ${SESSION_SECRET:-nexcore_secure_session_secret_change_me}
+      APP_ID: nexcore-app
+      COOKIE_SAME_SITE: lax
+      COOKIE_SECURE: false
+      FRONTEND_URL: http://localhost:3000
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      AUTH_EMAIL_FROM: ${AUTH_EMAIL_FROM:-NEXCORE <onboarding@resend.dev>}
+      APP_URL: http://localhost:3000
+      PASSWORD_RESET_CONSOLE_OTP: false
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - nexcore-network
+
+  # Frontend Next.js Service
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: nexcore-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:5000
+    depends_on:
+      - backend
+    networks:
+      - nexcore-network
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+
+networks:
+  nexcore-network:
+    driver: bridge

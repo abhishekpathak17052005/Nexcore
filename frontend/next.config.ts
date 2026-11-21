@@ -1,8 +1,9 @@
-import type { NextConfig } from "next";
+﻿import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   typedRoutes: false,
+  output: 'standalone',
   typescript: {
     // Type errors are pre-existing and do not affect runtime behaviour.
     // Fix them incrementally after deployment.
